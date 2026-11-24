@@ -9,7 +9,7 @@ npx cap add android
 npx cap sync android
 
 # Игра только горизонтально
-sed -i 's/<activity /<activity android:screenOrientation="sensorLandscape" /' android/app/src/main/AndroidManifest.xml
+perl -0pi -e 's/<activity(\s)/<activity android:screenOrientation="sensorLandscape"$1/' android/app/src/main/AndroidManifest.xml
 grep -q 'screenOrientation="sensorLandscape"' android/app/src/main/AndroidManifest.xml
 
 # Версия приложения (versionCode растёт с каждой версией — обновления ставятся поверх)
