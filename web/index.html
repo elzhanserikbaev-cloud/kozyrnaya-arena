@@ -1976,22 +1976,30 @@ function onlineJoin(){
   toast('Подключаемся к комнате '+code+'…');
   const peer=new Peer(PEER_OPTS);
   NET.peer=peer;NET.tr='p2p';NET.isHost=false;NET.room=code;
-  let to=setTimeout(()=>{if(NET.peer===peer&&!NET.id){toast('Не удалось подключиться к комнате. Проверьте код и что хост не закрыл игру.','bad');netReset(false);}},20000);
-  peer.on('open',()=>{
+  let to=setTimeout(()=>{if(NET.peer===peer&&!NET.id){toast('Не удалось подключиться к комнате. Проверьте код и что хост не закрыл игру.','bad');netReset(false);}},30000);
+  // повторяем попытку: сервер знакомства иногда отвечает с задержкой
+  let attempt=0;
+  const tryConnect=()=>{
+    attempt++;
     const conn=peer.connect(PEER_PREFIX+code,{reliable:true,serialization:'json'});
     NET.conn=conn;
+    const retry=setTimeout(()=>{if(NET.conn===conn&&!NET.id&&attempt<4){try{conn.close();}catch(_){}tryConnect();}},6000);
+    conn.on('open',()=>clearTimeout(retry));
     conn.on('data',m=>{
       if(!m||typeof m!=='object') return;
-      if(m.t==='hello'&&!NET.id){clearTimeout(to);NET.id=m.id;p2pSend(conn,{t:'hello',name});NET.view='lobby';S.showStart=false;renderOverlay();}
+      if(m.t==='hello'&&!NET.id){clearTimeout(to);clearTimeout(retry);NET.id=m.id;p2pSend(conn,{t:'hello',name});NET.view='lobby';S.showStart=false;renderOverlay();}
       else clientHandle(m);
     });
-    conn.on('close',()=>{if(NET.conn===conn){toast('Связь с хостом потеряна','bad');netReset(true);}});
+    conn.on('close',()=>{if(NET.conn===conn&&NET.id){toast('Связь с хостом потеряна','bad');netReset(true);}});
     conn.on('error',()=>{});
-  });
+  };
+  peer.on('open',tryConnect);
   peer.on('disconnected',()=>{if(NET.peer===peer&&!peer.destroyed){try{peer.reconnect();}catch(_){}}});
   peer.on('error',e=>{
     if(NET.peer!==peer) return;
-    if(NET.id&&e.type!=='peer-unavailable') return;
+    if(NET.id) return;
+    if(e.type==='peer-unavailable'&&attempt<3){setTimeout(()=>{if(NET.peer===peer&&!NET.id)tryConnect();},2000);return;}
+    if(['network','server-error','socket-error','socket-closed'].includes(e.type)&&attempt<3) return;
     clearTimeout(to);
     toast(e.type==='peer-unavailable'?`Комната ${code} не найдена. Проверьте код.`:'Не удалось подключиться: нет связи с сервером знакомства. Проверьте интернет.','bad');
     netReset(false);
