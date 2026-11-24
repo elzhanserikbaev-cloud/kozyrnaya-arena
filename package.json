@@ -1,7 +1,7 @@
 {
   "name": "kozyrnaya-arena",
   "productName": "Kozyrnaya Arena",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Козырная Арена — мрачный 3D карточный автобаттлер 21+: герои-карты, покерные руки, усиления и заклинания. Одиночная игра, по сети и онлайн.",
   "main": "main.js",
   "license": "UNLICENSED",
@@ -18,19 +18,41 @@
   },
   "devDependencies": {
     "electron": "44.10.2",
-    "electron-builder": "26.18.1"
+    "electron-builder": "26.18.1",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/status-bar": "8.0.4"
   },
   "build": {
     "appId": "io.github.elzhanserikbaev-cloud.kozyrnaya-arena",
     "productName": "Kozyrnaya Arena",
     "copyright": "Kozyrnaya Arena",
-    "files": ["main.js", "server.js", "web/**/*", "build/icon.png"],
-    "directories": { "output": "dist", "buildResources": "build" },
+    "files": [
+      "main.js",
+      "server.js",
+      "web/**/*",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "afterPack": "build/after-pack.js",
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.png"
     },
@@ -40,17 +62,32 @@
       "shortcutName": "Козырная Арена",
       "artifactName": "KozyrnayaArena-${version}-Windows-Setup.${ext}"
     },
-    "portable": { "artifactName": "KozyrnayaArena-${version}-Windows-Portable.${ext}" },
+    "portable": {
+      "artifactName": "KozyrnayaArena-${version}-Windows-Portable.${ext}"
+    },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "category": "public.app-category.card-games",
       "icon": "build/icon.png",
       "identity": null,
       "artifactName": "KozyrnayaArena-${version}-macOS-${arch}.${ext}"
     },
-    "dmg": { "title": "Kozyrnaya Arena" },
+    "dmg": {
+      "title": "Kozyrnaya Arena"
+    },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Game",
       "icon": "build/icon.png",
       "synopsis": "3D карточный автобаттлер",

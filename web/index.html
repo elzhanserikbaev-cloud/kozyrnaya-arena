@@ -2,8 +2,16 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Козырная Арена</title>
+<meta name="theme-color" content="#0b090a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Козырная Арена">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Rubik:wght@400;500;700&display=swap">
 <style>
 /* Layout: 3D table fills the stage; top HUD, shop rail along the bottom, hand/info/log column on the right. */
@@ -224,11 +232,138 @@ details[open].panel summary::after{content:' −'}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition:none!important}}
 .brand .age{display:inline-block;margin:0 0 0 6px;padding:1px 6px;border:1px solid var(--suit-red);border-radius:5px;color:#e0505f;font-family:var(--f-body);font-size:10px;font-weight:700;letter-spacing:.04em;vertical-align:3px}
 .credits{font-size:11px;color:var(--mute)}
+
+/* === Читаемость: крупнее, контрастнее, мелкие подписи обычным шрифтом === */
+:root{--mute:#c3b6a5;--txt:#f2ebdf}
+html{touch-action:manipulation}
+body{font-size:15px;-webkit-touch-callout:none}
+.small{font-size:13px}
+.brand span:not(.age){font-family:var(--f-body);font-size:11.5px;letter-spacing:.04em;text-transform:none}
+.round{font-family:var(--f-body);font-size:14px;letter-spacing:0;text-transform:none;font-weight:500}
+.hpbox .who{font-size:13.5px;letter-spacing:0;text-transform:none;font-weight:500;color:var(--txt)}
+.hpbox b{font-family:var(--f-body);font-weight:700;font-size:17px}
+.chip{font-size:13px;color:var(--txt)}
+.ibtn{font-size:13.5px;padding:7px 12px}
+.stepc{font-family:var(--f-body);font-size:15px;letter-spacing:0}
+.hint{font-size:14.5px;color:var(--txt);background:#0d0a0bf0;border:1px solid var(--line);padding:8px 16px;white-space:normal;max-width:min(760px,80%);text-align:center;line-height:1.35}
+.hint b{color:var(--brass)}
+.htag .k{font-size:12.5px;letter-spacing:0;text-transform:none;font-weight:500}
+.htag b{font-size:21px}
+.htag span{font-size:14px;color:var(--txt)}
+.ubar{width:96px}
+.ubar .hp{height:16px}
+.ubar .hp span{font-size:12.5px}
+.ubar.full .mp i{box-shadow:none}
+.fl span{font-family:var(--f-body);font-size:22px}
+.fl .crit{font-size:28px}
+.fl .skill{font-size:16px}
+.fl .info,.fl .buff{font-size:15px}
+.gold{font-family:var(--f-body)}
+.coin{box-shadow:0 0 0 2px #0005 inset}
+.interest{font-size:13px}
+.lvl{font-size:14px;color:var(--txt)}
+.lvl b{font-family:var(--f-body)}
+.odds{font-size:13px}
+.btn{font-size:14.5px;padding:9px 12px;min-height:42px}
+.btn .pr{font-family:var(--f-body);font-size:13.5px;font-weight:700}
+.fightbtn{font-family:var(--f-body);font-size:17px;letter-spacing:.02em;background:linear-gradient(180deg,#d6af5c,#ad8432);box-shadow:0 3px 0 var(--brass-lo)}
+.buy .price{font-family:var(--f-body);font-size:13.5px}
+#hand .hl{font-size:13px;letter-spacing:0;text-transform:none;font-weight:500}
+#hand .empty{font-size:13.5px}
+.banner{font-size:30px;text-shadow:0 3px 14px rgba(0,0,0,.9)}
+.sect,.panel h3,details.panel summary{font-family:var(--f-body);font-size:13.5px;font-weight:700;letter-spacing:.02em;text-transform:none;color:var(--brass)}
+.netrow label{font-size:14px;color:var(--txt)}
+.pl{font-size:14.5px}
+.pl b{font-family:var(--f-body);font-size:13.5px}
+.trait{font-size:13px}
+.trait b{font-size:14px}
+.trait .cnt{font-family:var(--f-body);font-size:12.5px}
+.mini{font-family:var(--f-body);font-size:15px}
+.bighand{font-size:24px}
+.info-head b{font-size:17px}
+.log{font-size:14px}
+.legend{font-size:14px}
+.diffs button b{font-family:var(--f-body);font-size:16px}
+.diffs button span{font-size:13px}
+.cont{font-family:var(--f-body)}
+.ovcard ul{color:var(--txt)}
+.ovcard ul b{color:var(--brass)}
+.toast{font-size:14.5px}
+.credits{font-size:12.5px}
+.sold{font-size:12.5px;letter-spacing:0;text-transform:none}
+
+/* === Телефоны и маленькие окна === */
+#rotate{display:none}
+#infobar{display:none}
+@media (max-width:900px),(max-height:560px){
+  body{font-size:13px}
+  #top{gap:4px 10px;padding:4px max(10px,env(safe-area-inset-right,0px)) 4px max(10px,env(safe-area-inset-left,0px))}
+  .brand{font-size:15px}
+  .brand span:not(.age){display:none}
+  .round{font-size:12px}
+  .round b{font-size:16px}
+  .hpbox{flex:1 1 90px;gap:5px}
+  .hpbox .who{font-size:12px;max-width:90px;overflow:hidden;text-overflow:ellipsis}
+  .hpbox b{font-size:14px}
+  .chip,.topbtns [data-act="fs"],.topbtns [data-act="rules"]{display:none}
+  .ibtn{padding:5px 9px;font-size:12.5px}
+  #side{top:40px}
+  #shopbar{grid-template-columns:auto 190px minmax(0,1fr);gap:8px;padding:4px max(8px,env(safe-area-inset-right,0px)) max(5px,env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+  .econ{gap:2px}
+  .gold{font-size:19px}
+  .coin{width:16px;height:16px}
+  .odds,.interest,.lvl .small{display:none}
+  .lvl{font-size:12px}
+  .xpbar{margin-top:2px}
+  .btns{gap:4px}
+  .btn{font-size:12.5px;padding:4px 8px;min-height:32px}
+  .fightbtn{font-size:14.5px;padding:6px}
+  .shop{grid-column:auto;display:flex;gap:6px;align-items:flex-end;justify-content:flex-start;overflow-x:auto;max-width:none}
+  .buy,.shop .sold{flex:0 0 auto}
+  .buy img,.shop .sold{height:76px;width:auto}
+  .buy .price{font-size:11.5px;bottom:-4px;padding:0 6px 0 3px}
+  .buy .price .coin{width:11px;height:11px}
+  #hand{top:6px;left:8px;max-width:40%}
+  #hand .hl{font-size:11px}
+  #hand .empty{display:none}
+  .mc{width:46px}
+  .hint{font-size:11.5px;top:4px;max-width:52%;padding:3px 10px;background:#0d0a0bd9}
+  .htag{display:none}
+  .btns [data-act="lock"],.btns [data-act="sellbtn"]{display:none}
+  .hint.warn{top:44px}
+  .stepc{top:6px;font-size:13px;padding:4px 10px}
+  .htag{min-width:100px}
+  .htag .k{font-size:10.5px}
+  .htag b{font-size:14px}
+  .htag span{font-size:11px}
+  .ubar{width:64px}
+  .ubar .hp{height:12px}
+  .ubar .hp span{font-size:10px}
+  .fl span{font-size:15px}
+  .fl .crit{font-size:19px}
+  .fl .skill{font-size:12px}
+  .banner{font-size:20px}
+  #infobar{display:block;position:absolute;left:50%;bottom:6px;transform:translateX(-50%);width:max-content;max-width:94%;background:#0d0a0bf2;border:1px solid var(--line);
+    border-radius:10px;padding:5px 11px;font-size:12.5px;line-height:1.3;z-index:5;pointer-events:none}
+  #infobar b{color:var(--brass)}
+  #overlay{padding:8px}
+  .ovcard{padding:16px;gap:10px;border-radius:16px}
+  .ovcard h1{font-size:26px}
+  .ovcard h2{font-size:20px}
+  .diffs button{padding:8px 6px}
+}
+@media (orientation:portrait) and (max-width:700px){
+  #rotate{display:flex;position:fixed;inset:0;z-index:100;background:var(--ink);color:var(--txt);flex-direction:column;align-items:center;justify-content:center;
+    gap:20px;padding:30px;text-align:center;font-size:18px;line-height:1.4}
+  #rotate .phone{width:44px;height:76px;border:4px solid var(--brass);border-radius:10px;animation:turn 2.2s ease-in-out infinite}
+}
+@keyframes turn{0%,25%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
 </style>
 </head>
 <body>
 <header id="top"></header>
-<main id="stage"><canvas id="c" aria-label="Игровой стол"></canvas><div id="ov3d"></div><div id="hand"></div></main>
+<main id="stage"><canvas id="c" aria-label="Игровой стол"></canvas><div id="ov3d"></div><div id="hand"></div><div id="infobar" hidden></div></main>
+<div id="rotate"><div class="phone"></div><div>Поверните телефон горизонтально,<br>чтобы играть</div></div>
 <aside id="side"></aside>
 <footer id="shopbar"></footer>
 <div id="overlay" hidden></div>
@@ -600,7 +735,8 @@ const V3=BABYLON.Vector3, C3=BABYLON.Color3, C4=BABYLON.Color4, MB=BABYLON.MeshB
 const canvas=$('#c');
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 const engine=new BABYLON.Engine(canvas,true,{stencil:true,antialias:true},true);
-engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,2));
+const IS_TOUCH=window.matchMedia&&matchMedia('(pointer:coarse)').matches;
+engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,IS_TOUCH?1.5:2));
 const scene=new BABYLON.Scene(engine);
 scene.clearColor=new C4(.03,.018,.02,1);
 scene.ambientColor=new C3(0,0,0);
@@ -618,17 +754,17 @@ camera.attachControl(canvas,true);
 try{camera.inputs.attached.pointers.buttons=[2];}catch(_){}
 function frameCamera(){
   const a=engine.getAspectRatio(camera);
-  camera.radius=10.2*Math.pow(Math.max(1,1.85/a),.85);
+  camera.radius=10.2*Math.pow(Math.max(1,1.85/a),.85)*(canvas.clientHeight<430?.86:1);
 }
 
 const hemi=new BABYLON.HemisphericLight('hemi',new V3(.2,1,-.3),scene);
 hemi.intensity=.42; hemi.diffuse=new C3(.85,.72,.62); hemi.groundColor=new C3(.1,.03,.03); hemi.specular=C3.Black();
 const spot=new BABYLON.SpotLight('spot',new V3(0,13,-3.2),new V3(0,-1,.2).normalize(),1.3,3,scene);
 spot.intensity=1.35; spot.diffuse=new C3(1,.9,.76); spot.specular=new C3(.5,.45,.35);
-const rimL=new BABYLON.PointLight('rim',new V3(0,2.5,8),scene); rimL.intensity=.35; rimL.diffuse=new C3(.9,.22,.18); rimL.specular=C3.Black();
-const sg=new BABYLON.ShadowGenerator(2048,spot);
+const rimL=new BABYLON.PointLight('rim',new V3(0,2.5,8),scene); rimL.intensity=.18; rimL.diffuse=new C3(.9,.22,.18); rimL.specular=C3.Black();
+const sg=new BABYLON.ShadowGenerator(IS_TOUCH?1024:2048,spot);
 sg.usePercentageCloserFiltering=true; sg.filteringQuality=BABYLON.ShadowGenerator.QUALITY_MEDIUM; sg.bias=.0006; sg.setDarkness(.3);
-const glow=new BABYLON.GlowLayer('glow',scene,{mainTextureSamples:2,blurKernelSize:48}); glow.intensity=1.05;
+const glow=new BABYLON.GlowLayer('glow',scene,{mainTextureSamples:2,blurKernelSize:24}); glow.intensity=.35;
 const glowDummy=MB.CreateBox('gd',{size:.001},scene); glowDummy.isVisible=false; glow.addIncludedOnlyMesh(glowDummy);
 
 /* ---------- текстуры ---------- */
@@ -683,7 +819,7 @@ const iconPaths=new Map();
 function iconPath(name){if(!iconPaths.has(name))iconPaths.set(name,new Path2D(ICONS[name]||''));return iconPaths.get(name);}
 function drawIcon(x,name,cx,cy,size,fill,glow){
   x.save();x.translate(cx-size/2,cy-size/2);x.scale(size/512,size/512);
-  if(glow){x.shadowColor=glow;x.shadowBlur=60;}
+  if(glow){x.shadowColor=glow;x.shadowBlur=24;}
   x.fillStyle=fill;x.fill(iconPath(name));x.restore();
 }
 function fitFont(x,text,maxW,size,min,tpl){let fs=size;x.font=tpl(fs);while(x.measureText(text).width>maxW&&fs>min){fs-=2;x.font=tpl(fs);}return fs;}
@@ -721,7 +857,7 @@ function drawFace(x,id,star,items=[]){
   x.fillStyle=pg;x.fillRect(px,py,pw,ph);
   x.globalAlpha=.07;x.fillStyle='#f0e0c0';x.font='bold 360px "Segoe UI Symbol",'+SERIF;x.textAlign='center';x.textBaseline='middle';x.fillText(su.sym,TW/2,py+ph/2+16);x.globalAlpha=1;
   const ig=x.createLinearGradient(0,py+20,0,py+ph-20);ig.addColorStop(0,'#f3ead7');ig.addColorStop(1,'#b59e78');
-  drawIcon(x,d.ic,TW/2-(items.length?20:0),py+ph/2+4,250,ig,SUITCOL[d.s]+'aa');
+  drawIcon(x,d.ic,TW/2-(items.length?20:0),py+ph/2+4,250,ig,SUITCOL[d.s]+'55');
   const vg=x.createRadialGradient(TW/2,py+ph/2,pw*.3,TW/2,py+ph/2,pw*.75);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.65)');
   x.fillStyle=vg;x.fillRect(px,py,pw,ph);
   x.restore();
@@ -753,7 +889,7 @@ function drawFace(x,id,star,items=[]){
   fitFont(x,nm,TW-80,48,26,fs=>`bold ${fs}px ${SERIF}`);
   x.fillStyle='#e9c97a';x.textAlign='center';x.fillText(nm,TW/2,ny+40);
   fitFont(x,d.ab.n,TW-70,32,22,fs=>`italic ${fs}px ${SERIF}`);
-  x.fillStyle='#b9aa92';x.fillText(d.ab.n,TW/2,ny+112);
+  x.fillStyle='#d6c9b0';x.fillText(d.ab.n,TW/2,ny+112);
   // статы
   const s2=stats({id,star});
   const badge=(cx,col,lab,val)=>{
@@ -776,7 +912,7 @@ function drawMagic(x,k){
   x.strokeStyle='rgba(201,162,74,.5)';x.lineWidth=3;x.beginPath();x.arc(TW/2,270,150,0,Math.PI*2);x.stroke();
   x.setLineDash([4,10]);x.lineWidth=2;x.beginPath();x.arc(TW/2,270,172,0,Math.PI*2);x.stroke();x.setLineDash([]);
   const ig=x.createLinearGradient(0,150,0,390);ig.addColorStop(0,'#f3ead7');ig.addColorStop(1,'#b59e78');
-  drawIcon(x,M.i,TW/2,272,220,ig,c1+'cc');
+  drawIcon(x,M.i,TW/2,272,220,ig,c1+'66');
   const nm=M.n.toUpperCase();
   x.strokeStyle='rgba(201,162,74,.7)';x.lineWidth=2;x.beginPath();x.moveTo(44,462);x.lineTo(TW-44,462);x.moveTo(44,540);x.lineTo(TW-44,540);x.stroke();
   fitFont(x,nm,TW-80,44,24,fs=>`bold ${fs}px ${SERIF}`);x.fillStyle='#e9c97a';x.fillText(nm,TW/2,502);
@@ -820,15 +956,15 @@ const haloMats=new Map();
 function haloMat(col){
   if(haloMats.has(col)) return haloMats.get(col);
   const W=256,H=330,t=dyn('halo'+col,W,H),x=t.getContext();
-  x.clearRect(0,0,W,H);x.shadowColor=col;x.shadowBlur=34;x.strokeStyle=col;x.lineWidth=12;
-  for(let i=0;i<2;i++){rr(x,44,48,W-88,H-96,22);x.stroke();}
+  x.clearRect(0,0,W,H);x.shadowColor=col;x.shadowBlur=16;x.strokeStyle=col;x.lineWidth=7;
+  rr(x,44,48,W-88,H-96,22);x.stroke();
   t.update();t.hasAlpha=true;
   const m=flatMat('hm'+col,t);m.alpha=1;haloMats.set(col,m);return m;
 }
 const solidMats=new Map();
 function glowMat(col){
   if(solidMats.has(col)) return solidMats.get(col);
-  const m=new BABYLON.StandardMaterial('gm'+col,scene);m.disableLighting=true;m.emissiveColor=C3.FromHexString(col);solidMats.set(col,m);return m;
+  const m=new BABYLON.StandardMaterial('gm'+col,scene);m.disableLighting=true;m.emissiveColor=C3.FromHexString(col).scale(.7);solidMats.set(col,m);return m;
 }
 const edgeMat=new BABYLON.StandardMaterial('edge',scene);edgeMat.diffuseColor=C3.FromHexString('#4a3820');edgeMat.specularColor=new C3(.1,.1,.1);
 
@@ -851,9 +987,9 @@ const edgeMat=new BABYLON.StandardMaterial('edge',scene);edgeMat.diffuseColor=C3
   // пыль в луче света
   const dust=new BABYLON.ParticleSystem('dust',260,scene);
   dust.particleTexture=dotTex;dust.createBoxEmitter(new V3(-.05,.02,-.05),new V3(.05,.06,.05),new V3(-8,.3,-6),new V3(8,6,5));
-  dust.emitter=V3.Zero();dust.minSize=.02;dust.maxSize=.06;dust.minLifeTime=6;dust.maxLifeTime=12;dust.emitRate=24;
-  dust.color1=new C4(1,.55,.25,.4);dust.color2=new C4(1,.3,.2,.25);dust.colorDead=new C4(0,0,0,0);
-  dust.minEmitPower=.05;dust.maxEmitPower=.15;dust.blendMode=BABYLON.ParticleSystem.BLENDMODE_ONEONE;dust.preWarmCycles=200;dust.start();
+  dust.emitter=V3.Zero();dust.minSize=.02;dust.maxSize=.06;dust.minLifeTime=6;dust.maxLifeTime=12;dust.emitRate=9;
+  dust.color1=new C4(1,.6,.35,.22);dust.color2=new C4(.9,.35,.25,.15);dust.colorDead=new C4(0,0,0,0);
+  dust.minEmitPower=.05;dust.maxEmitPower=.15;dust.blendMode=BABYLON.ParticleSystem.BLENDMODE_STANDARD;dust.preWarmCycles=200;dust.start();
 })();
 
 /* ---------- места на столе ---------- */
@@ -956,7 +1092,7 @@ function burst(pos,col,count=40,power=1.6,opts={}){
   const c=C3.FromHexString(col);ps.color1=new C4(c.r,c.g,c.b,1);ps.color2=new C4(Math.min(1,c.r+.3),Math.min(1,c.g+.3),Math.min(1,c.b+.3),1);ps.colorDead=new C4(c.r,c.g,c.b,0);
   ps.minSize=opts.minSize||.05;ps.maxSize=opts.maxSize||.17;ps.minLifeTime=.25;ps.maxLifeTime=opts.life||.65;
   ps.minEmitPower=power*.5;ps.maxEmitPower=power*1.6;ps.gravity=new V3(0,opts.g??-5,0);
-  ps.manualEmitCount=count;ps.blendMode=BABYLON.ParticleSystem.BLENDMODE_ONEONE;ps.targetStopDuration=.25;ps.disposeOnStop=true;ps.start();
+  ps.manualEmitCount=Math.ceil(count*.55);ps.blendMode=BABYLON.ParticleSystem.BLENDMODE_STANDARD;ps.targetStopDuration=.25;ps.disposeOnStop=true;ps.start();
 }
 const posOf=c=>{const n=nodes.get(c.u.uid);return n?n.root.position.add(new V3(0,.35,0)):null;};
 function bolt(c,t,col){return boltPos(posOf(c),posOf(t),col);}
@@ -965,7 +1101,7 @@ function boltPos(a,b,col){
   const m=MB.CreateSphere('bolt',{diameter:.26,segments:8},scene);m.material=glowMat(col);m.isPickable=false;m.position.copyFrom(a);glow.addIncludedOnlyMesh(m);
   const tr=new BABYLON.ParticleSystem('tr',120,scene);tr.particleTexture=dotTex;tr.emitter=m;tr.createSphereEmitter(.06);
   const cc=C3.FromHexString(col);tr.color1=new C4(cc.r,cc.g,cc.b,.9);tr.color2=new C4(1,1,1,.6);tr.colorDead=new C4(cc.r,cc.g,cc.b,0);
-  tr.minSize=.05;tr.maxSize=.14;tr.minLifeTime=.12;tr.maxLifeTime=.3;tr.emitRate=260;tr.minEmitPower=0;tr.maxEmitPower=.2;tr.blendMode=BABYLON.ParticleSystem.BLENDMODE_ONEONE;tr.start();
+  tr.minSize=.05;tr.maxSize=.14;tr.minLifeTime=.12;tr.maxLifeTime=.3;tr.emitRate=110;tr.minEmitPower=0;tr.maxEmitPower=.2;tr.blendMode=BABYLON.ParticleSystem.BLENDMODE_STANDARD;tr.start();
   const h=.8+V3.Distance(a,b)*.12;
   return tween(fd(330),k=>{V3.LerpToRef(a,b,k,m.position);m.position.y+=Math.sin(k*Math.PI)*h;},lin).then(()=>{
     tr.stop();setTimeout(()=>tr.dispose(),400);glow.removeIncludedOnlyMesh(m);m.dispose();burst(b,col,26,1.4);
@@ -1300,8 +1436,9 @@ function onSlot(loc){
   if(S.phase!=='shop') return;
   const u=getAt(S.p,loc);
   if(S.sel){if(locEq(S.sel,loc)) S.sel=null; else return moveUnit(S.sel,loc);}
-  else if(u){S.sel=loc;S.info={id:u.id,star:u.star};sfx('pick');}
+  else if(u){S.sel=loc;S.info={id:u.id,star:u.star,items:u.items||[]};sfx('pick');}
   render();
+  if(S.sel) renderInfo();
 }
 async function fight(){
   if(S.phase!=='shop') return;
@@ -1581,7 +1718,7 @@ function renderStage(){
   let h=$('#hint'),msg=null,warn=false;
   if(S.phase==='shop'&&!S.showStart){
     if(S.useMagic!=null&&S.p.hand[S.useMagic]){msg=`Нажмите на героя, чтобы выдать «${MAGIC[S.p.hand[S.useMagic]].n}» · Esc — отмена`;warn=true;}
-    else msg=S.sel?'Нажмите на место на столе или на «Продать»':'Перетащите карту на линию · правая кнопка мыши вращает камеру · колесо приближает';
+    else msg=S.sel?'Нажмите на место на столе, куда поставить героя, или на «Продать»':stepHint();
   } else if(S.phase==='battle'&&S.targeting!=null&&S.p.hand[S.targeting]){
     const M=MAGIC[S.p.hand[S.targeting]];msg=`«${M.n}»: нажмите на ${M.t==='foe'?'карту соперника':'свою карту'} · Esc — отмена`;warn=true;
   }
@@ -1599,6 +1736,20 @@ function renderHand(){
     const M=MAGIC[k],dim=(bt&&(M.k==='item'||S.spellsUsed>=2))||S.phase==='result',on=S.useMagic===i||S.targeting===i;
     return `<button class="mc ${on?'on':''} ${dim?'dim':''}" data-act="magic" data-i="${i}" data-minfo="${k}" aria-label="${M.n}"><img src="${magicThumb(k)}" alt="" draggable="false"></button>`;
   }).join(''):`<span class="empty">${bt?'Заклинаний нет.':'Покупайте усиления и заклинания в лавке магии справа от героев.'}</span>`}</div>`;
+}
+// Пошаговые подсказки для новичка: что сделать прямо сейчас
+function stepHint(){
+  const p=S.p,onBoard=boardCount(p),onBench=p.bench.filter(Boolean).length,cap=capOf(p.level);
+  const touch=IS_TOUCH?'нажмите на героя, затем на место':'перетащите мышью или нажмите на героя, затем на место';
+  if(S.round<=4||onBoard===0){
+    if(onBoard===0&&onBench===0) return 'Шаг 1. Купите героя: нажмите на карту в магазине внизу. Цена в золоте указана под картой.';
+    if(onBoard<cap&&onBench>0) return `Шаг 2. Поставьте героя на линию 1–5 (${touch}). Мест на поле: ${onBoard} из ${cap}.`;
+    return S.mode==='net'?'Шаг 3. Нажмите «Готов» внизу слева. Бой пройдёт сам.':'Шаг 3. Нажмите «В бой!» внизу слева. Бой пройдёт сам.';
+  }
+  if(onBoard<cap&&onBench>0) return `На поле есть свободные места: ${onBoard} из ${cap}. Поставьте героев со скамьи.`;
+  if(IS_TOUCH&&innerHeight<560) return '';
+  return IS_TOUCH?'Совет: три одинаковых героя сливаются в ★★. Разные герои одного ранга дают покерную руку.'
+    :'Совет: три одинаковых героя сливаются в ★★. Правая кнопка мыши вращает стол, колесо приближает.';
 }
 function renderShopbar(){
   const p=S.p,shopPhase=S.phase==='shop';
@@ -1657,7 +1808,14 @@ function infoHTML(){
     <p><b>${d.ab.n}.</b> ${AB[d.ab.t](d.ab.v,st.atk)}</p>
     ${(x.items||[]).length?`<p class="small">Усиления: ${x.items.map(k=>MAGIC[k].n+' — '+magicDesc(k).toLowerCase()).join(' ')}</p>`:''}`;
 }
-function renderInfo(){const b=$('#info');if(b)b.innerHTML=infoHTML();}
+let infoTimer=0;
+function renderInfo(){
+  const b=$('#info');if(b)b.innerHTML=infoHTML();
+  const bar=$('#infobar'),x=S&&S.info;if(!bar||!x) return;
+  if(x.magic){const M=MAGIC[x.magic];bar.innerHTML=`<b>${esc(M.n)}</b> · ${M.k==='item'?'усиление':'заклинание'}, цена ${M.c}. ${esc(magicDesc(x.magic))}`;}
+  else{const d=DEF[x.id],st=stats(x);bar.innerHTML=`<b>${esc(d.n)}${x.star>1?' '+'★'.repeat(x.star):''}</b> · ${rl(d.r)}${SUITS[d.s].sym} · АТК ${st.atk}, ОЗ ${st.hp} · ${esc(d.ab.n)}: ${esc(AB[d.ab.t](d.ab.v,st.atk))}`;}
+  bar.hidden=false;clearTimeout(infoTimer);infoTimer=setTimeout(()=>{bar.hidden=true;},5000);
+}
 function renderSide(){
   const units=S.p.board.filter(Boolean),{hand,tl}=teamInfo(units);
   const traits=['S','H','D','C'].map(k=>{
@@ -2324,6 +2482,10 @@ function netOver(){
 }
 
 /* ---------- запуск ---------- */
+if('serviceWorker' in navigator&&location.protocol==='https:'&&location.hostname.endsWith('github.io')){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+try{const sb=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.StatusBar;if(sb)sb.hide();}catch(_){}
 frameCamera();
 if(location.hash.startsWith('#demo')){
   // демо-расклад для проверки: готовое поле у обеих сторон

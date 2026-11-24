@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.elzhanserikbaev.kozyrnayaarena",
+  "appName": "Козырная Арена",
+  "webDir": "web",
+  "android": {
+    "backgroundColor": "#0b090a"
+  }
+}

@@ -38,8 +38,41 @@ jobs:
             dist/*.AppImage
             dist/*.deb
 
+  android:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - name: ImageMagick для иконок
+        run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+      - name: Android-проект
+        run: bash build/android-setup.sh
+      - name: Сборка APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Подпись
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: bash build/android-sign.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-android
+          if-no-files-found: error
+          path: dist/*.apk
+
   release:
-    needs: build
+    needs: [build, android]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
