@@ -12,7 +12,7 @@ const os = require('os');
 const crypto = require('crypto');
 
 const MAX = 4 * 1024 * 1024;
-const FILES = { '/': 'index.html', '/index.html': 'index.html', '/babylon.js': 'babylon.js', '/peerjs.min.js': 'peerjs.min.js' };
+const FILES = { '/': 'index.html', '/index.html': 'index.html', '/babylon.js': 'babylon.js', '/peerjs.min.js': 'peerjs.min.js', '/icons.js': 'icons.js' };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 
 function localIPs() {
