@@ -1,0 +1,60 @@
+{
+  "name": "kozyrnaya-arena",
+  "productName": "Kozyrnaya Arena",
+  "version": "1.0.0",
+  "description": "Козырная Арена — 3D карточный автобаттлер: герои-карты, покерные руки, усиления и заклинания. Одиночная игра, по сети и онлайн.",
+  "main": "main.js",
+  "license": "UNLICENSED",
+  "author": {
+    "name": "Kozyrnaya Arena",
+    "email": "elzhanserikbaev-cloud@users.noreply.github.com"
+  },
+  "homepage": "https://elzhanserikbaev-cloud.github.io/kozyrnaya-arena/",
+  "repository": "github:elzhanserikbaev-cloud/kozyrnaya-arena",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.10.2",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "io.github.elzhanserikbaev-cloud.kozyrnaya-arena",
+    "productName": "Kozyrnaya Arena",
+    "copyright": "Kozyrnaya Arena",
+    "files": ["main.js", "server.js", "web/**/*", "build/icon.png"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "afterPack": "build/after-pack.js",
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Козырная Арена",
+      "artifactName": "KozyrnayaArena-${version}-Windows-Setup.${ext}"
+    },
+    "portable": { "artifactName": "KozyrnayaArena-${version}-Windows-Portable.${ext}" },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category": "public.app-category.card-games",
+      "icon": "build/icon.png",
+      "identity": null,
+      "artifactName": "KozyrnayaArena-${version}-macOS-${arch}.${ext}"
+    },
+    "dmg": { "title": "Kozyrnaya Arena" },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Game",
+      "icon": "build/icon.png",
+      "synopsis": "3D карточный автобаттлер",
+      "artifactName": "KozyrnayaArena-${version}-Linux-${arch}.${ext}"
+    }
+  }
+}
