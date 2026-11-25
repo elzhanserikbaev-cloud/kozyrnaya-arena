@@ -99,6 +99,37 @@ func _log_line(t: String) -> void:
 		if f:
 			f.seek_end(); f.store_line(t)
 
+## Автотест перетаскивания: настоящие события мыши через Input.
+func _dragtest() -> void:
+	hud.show_overlay(null)
+	await get_tree().create_timer(1.0).timeout
+	m.p.gold = 20
+	_on_act("buy", 0)
+	_on_act("buy", 1)
+	await get_tree().create_timer(1.0).timeout
+	print("bench before: ", m.p.bench.map(func(u): return u.id if u else null), " board: ", m.p.board.map(func(u): return u.id if u else null))
+	var u = null
+	for x in m.p.bench:
+		if x: u = x; break
+	var c: Card3D = cards["p:%d" % u.uid]
+	var from := table.screen_pos(c.global_position + Vector3(0, 0.6, 0))
+	var to := table.screen_pos(Table3D.pos_board(2) + Vector3(0, 0.3, 0))
+	print("from ", from, " to ", to, " pick at from: ", table.pick(from))
+	var ev := InputEventMouseButton.new(); ev.button_index = MOUSE_BUTTON_LEFT; ev.pressed = true; ev.position = from; ev.global_position = from
+	Input.parse_input_event(ev)
+	await get_tree().process_frame
+	for i in 12:
+		var mm := InputEventMouseMotion.new(); mm.position = from.lerp(to, (i + 1) / 12.0); mm.global_position = mm.position; mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+		Input.parse_input_event(mm)
+		await get_tree().process_frame
+	print("drag state: ", drag.keys(), " moved=", drag.get("moved"))
+	var up := InputEventMouseButton.new(); up.button_index = MOUSE_BUTTON_LEFT; up.pressed = false; up.position = to; up.global_position = to
+	Input.parse_input_event(up)
+	await get_tree().create_timer(0.5).timeout
+	print("table point at to: ", table.pick(to).table_point, " nearest: ", table.nearest_slot(table.pick(to).table_point, ["board:", "bench:", "sell"]))
+	print("bench after: ", m.p.bench.map(func(u): return u.id if u else null), " board: ", m.p.board.map(func(u): return u.id if u else null))
+	get_tree().quit()
+
 ## Для проверки без участия человека: -- --demo / --demofight / --shot=путь.png / --menu
 func _dev_args() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -111,6 +142,7 @@ func _dev_args() -> void:
 		elif a == "--demo": demo = true
 		elif a == "--demofight": demo = true; demofight = true
 		elif a == "--menu": menu = true
+		elif a == "--dragtest": _dragtest()
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
@@ -197,6 +229,8 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 				else:
 					c.position = w.pos
 		c.set_meta("u", u)
+		var st := Rules.stats(u)
+		c.set_stats(int(st.atk), int(st.hp))
 
 func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 	_sync_cards(animate, spawn_from)
@@ -310,7 +344,7 @@ func _on_act(name: String, arg: Variant) -> void:
 		"sell":
 			if sel_uid >= 0:
 				var loc = Rules.loc_of_uid(m.p, sel_uid)
-				if loc != null and _res(m.sell(loc.z, loc.i)):
+				if not loc.is_empty() and _res(m.sell(loc.zone, loc.i)):
 					Sfx.play("sell")
 					sel_uid = -1
 					_sync_all()
@@ -503,7 +537,7 @@ func _press(pos: Vector2) -> void:
 	if hand_sel >= 0:
 		if c and c.side == "p":
 			var loc = Rules.loc_of_uid(m.p, c.uid)
-			if loc != null and _res(m.use_item(hand_sel, loc.z, loc.i)):
+			if not loc.is_empty() and _res(m.use_item(hand_sel, loc.zone, loc.i)):
 				Sfx.play("cast"); c.pop()
 				hand_sel = -1
 				_sync_all()
@@ -512,7 +546,7 @@ func _press(pos: Vector2) -> void:
 		return
 	if c and c.side == "p":
 		var loc = Rules.loc_of_uid(m.p, c.uid)
-		if loc != null:
+		if not loc.is_empty():
 			drag = {"card": c, "from": loc, "start": pos, "moved": false}
 			c.set_tilt(false)
 
@@ -531,12 +565,12 @@ func _release(pos: Vector2) -> void:
 	var p: Vector3 = table.pick(pos).table_point
 	var s := table.nearest_slot(p, ["board:", "bench:", "sell"])
 	if s == "sell":
-		if _res(m.sell(from.z, from.i)):
+		if _res(m.sell(from.zone, from.i)):
 			Sfx.play("sell")
 			if sel_uid == c.uid: sel_uid = -1
 	elif s != "":
 		var parts := s.split(":")
-		var r := m.move(from.z, from.i, parts[0], int(parts[1]))
+		var r := m.move(from.zone, from.i, parts[0], int(parts[1]))
 		if _res(r):
 			Sfx.play("place")
 	_sync_all()
@@ -872,7 +906,7 @@ func _button(text: String, action: String, arg: Variant = null, variation := "")
 	var b := Button.new()
 	b.text = text
 	b.theme_type_variation = variation
-	b.custom_minimum_size = Vector2(0, 62)
+	b.custom_minimum_size = Vector2(0, 50)
 	b.focus_mode = Control.FOCUS_NONE
 	b.pressed.connect(func(): _on_act(action, arg))
 	return b

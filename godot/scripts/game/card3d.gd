@@ -3,8 +3,8 @@ extends Node3D
 ## 3D-карта на столе: лицо (запечённая текстура), рубашка, полоски ОЗ/маны/щита в бою,
 ## подсветка выбора (золотая подложка, без свечения), всплывающие числа, анимации.
 
-const W := 1.25
-const H := 1.75
+const W := 1.4
+const H := 1.96
 const TILT := 0.55             # наклон к камере (рад), карта «стоит» на подставке
 const BAR_W := 1.15
 
@@ -28,6 +28,8 @@ var _plate_mat: StandardMaterial3D
 var _dim := 1.0
 var _hp_ratio := 1.0
 var _move_tw: Tween
+var atk_label: Label3D
+var hp_label_face: Label3D
 
 static var _quad: QuadMesh
 
@@ -85,8 +87,27 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	body.set_meta("card", self)
 	pivot.add_child(body)
 	_build_bars()
+	atk_label = _stat_label(Vector2(112, 662), Color("ffe3d6"))
+	hp_label_face = _stat_label(Vector2(400, 662), Color("dcffe6"))
 	set_tilt(true)
 	return self
+
+## Крупные цифры АТК/ОЗ поверх медальонов (чтобы читались на столе).
+func _stat_label(px: Vector2, col: Color) -> Label3D:
+	var l := Label3D.new()
+	l.font = CardFaces.f_bold
+	l.font_size = 80
+	l.pixel_size = 0.003
+	l.modulate = col
+	l.outline_size = 24
+	l.outline_modulate = Color(0.05, 0.03, 0.02, 1)
+	l.position = Vector3((px.x / 512.0 - 0.5) * W, (0.5 - px.y / 716.0) * H, 0.012)
+	pivot.add_child(l)
+	return l
+
+func set_stats(atk: int, hp: int) -> void:
+	atk_label.text = str(atk)
+	hp_label_face.text = str(hp)
 
 ## Карта «стоит» с наклоном к камере (на столе) или лежит плашмя (в полёте/руке).
 func set_tilt(standing: bool) -> void:

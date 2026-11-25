@@ -23,14 +23,14 @@ var env: Environment
 var slots := {}                # "board:i" / "bench:i" / "sell" → MeshInstance3D
 var slot_mats := {}
 var hovered: Card3D
-var side_px := 360.0
-var top_px := 76.0
-var bottom_px := 210.0
+var side_px := 350.0
+var top_px := 56.0
+var bottom_px := 234.0
 
-static func pos_board(i: int) -> Vector3: return Vector3((i - 2) * 1.55, 0, 1.95)
-static func pos_enemy(i: int) -> Vector3: return Vector3((i - 2) * 1.55, 0, -2.1)
-static func pos_bench(i: int) -> Vector3: return Vector3(-4.55 + i * 1.32, 0, 4.4)
-static func pos_sell() -> Vector3: return Vector3(4.15, 0, 4.4)
+static func pos_board(i: int) -> Vector3: return Vector3((i - 2) * 1.6, 0, 1.95)
+static func pos_enemy(i: int) -> Vector3: return Vector3((i - 2) * 1.6, 0, -2.1)
+static func pos_bench(i: int) -> Vector3: return Vector3(-4.75 + i * 1.5, 0, 4.5)
+static func pos_sell() -> Vector3: return Vector3(4.6, 0, 4.5)
 
 func _ready() -> void:
 	_build_env()
@@ -220,7 +220,7 @@ func _frame() -> void:
 	var free_w := vs.x - side_px
 	var free_h := vs.y - top_px - bottom_px
 	var fa := free_w / maxf(1.0, free_h)
-	cam_dist = 14.8 * pow(maxf(1.0, 1.9 / fa), 0.8) * clampf(900.0 / maxf(1.0, vs.y), 0.85, 1.25) ** 0.0
+	cam_dist = 15.2 * pow(maxf(1.0, 1.9 / fa), 0.8) * clampf(900.0 / maxf(1.0, vs.y), 0.85, 1.25) ** 0.0
 	_update_camera()
 	# смещение проекции: центр свободной области относительно центра экрана, в долях
 	var cx := (free_w * 0.5) / vs.x - 0.5

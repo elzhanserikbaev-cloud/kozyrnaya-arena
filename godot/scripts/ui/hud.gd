@@ -6,9 +6,9 @@ extends CanvasLayer
 
 signal act(name: String, arg: Variant)
 
-const SIDE_W := 360
-const BOTTOM_H := 210
-const TOP_H := 76
+const SIDE_W := 330
+const BOTTOM_H := 214
+const TOP_H := 56
 
 var root: Control
 var top: PanelContainer
@@ -79,7 +79,6 @@ func _btn(text: String, action: String, variation := "", arg: Variant = null) ->
 	if variation != "":
 		b.theme_type_variation = variation
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(130, 58)
 	b.pressed.connect(func(): act.emit(action, arg))
 	return b
 
@@ -94,52 +93,51 @@ func _label(text := "", variation := "", size := 0) -> Label:
 
 func _build_top() -> void:
 	top = PanelContainer.new()
+	top.theme_type_variation = "BarPanel"
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top.custom_minimum_size.y = TOP_H
 	root.add_child(top)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 18)
 	top.add_child(h)
-	var logo := TextureRect.new()
-	logo.texture = UiTheme.icon("title_logo")
-	if logo.texture:
-		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		logo.custom_minimum_size = Vector2(170, 44)
-		h.add_child(logo)
-	else:
-		h.add_child(_label("Козырная Арена", "HeaderLabel", 24))
-	lbl_round = _label("Раунд 1", "HeaderLabel", 22)
-	h.add_child(lbl_round)
+	var brand := _label("КОЗЫРНАЯ АРЕНА", "TitleLabel", 18)
+	brand.add_theme_color_override("font_color", UiTheme.GOLD)
+	h.add_child(brand)
+	var rp := PanelContainer.new()
+	rp.theme_type_variation = "ChipPanel"
+	rp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	lbl_round = _label("Раунд 1", "TitleLabel", 15)
+	rp.add_child(lbl_round)
+	h.add_child(rp)
 	h.add_child(_hp_block(true))
 	h.add_child(_hp_block(false))
 	chips_box = HBoxContainer.new()
 	chips_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chips_box.add_theme_constant_override("separation", 8)
 	h.add_child(chips_box)
-	btn_sound = _btn("Звук вкл.", "sound")
+	btn_sound = _btn("Звук вкл.", "sound", "GhostButton")
 	h.add_child(btn_sound)
-	h.add_child(_btn("Правила", "rules"))
-	h.add_child(_btn("Меню", "menu"))
+	h.add_child(_btn("Правила", "rules", "GhostButton"))
+	h.add_child(_btn("Меню", "menu", "GhostButton"))
 
 func _hp_block(me: bool) -> Control:
 	var v := HBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	var ic := TextureRect.new()
 	ic.texture = UiTheme.icon("heart")
-	ic.custom_minimum_size = Vector2(30, 30)
+	ic.custom_minimum_size = Vector2(22, 22)
 	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	var name_l := _label("Вы" if me else "Соперник", "", 17)
+	var name_l := _label("Вы" if me else "Соперник", "MutedLabel", 15)
 	var bar := ProgressBar.new()
-	bar.custom_minimum_size = Vector2(170, 24)
+	bar.custom_minimum_size = Vector2(170, 12)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.max_value = Data.START_HP
 	bar.value = Data.START_HP
 	bar.show_percentage = false
 	if not me:
 		bar.theme_type_variation = "FoeBar"
-	var val := _label("100", "HeaderLabel", 22)
+	var val := _label("100", "TitleLabel", 18)
 	v.add_child(ic); v.add_child(name_l); v.add_child(bar); v.add_child(val)
 	if me:
 		bar_me = bar; lbl_me = val
@@ -150,29 +148,30 @@ func _hp_block(me: bool) -> Control:
 func _section(title: String) -> VBoxContainer:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
-	v.add_child(_label(title, "HeaderLabel"))
+	v.add_child(_label(title.to_upper(), "HeaderLabel"))
 	return v
 
 func _build_side() -> void:
 	side = PanelContainer.new()
 	side.anchor_left = 1; side.anchor_right = 1; side.anchor_top = 0; side.anchor_bottom = 1
-	side.offset_left = -SIDE_W; side.offset_top = TOP_H
+	side.offset_left = -SIDE_W - 10; side.offset_right = -10; side.offset_top = TOP_H + 10; side.offset_bottom = -BOTTOM_H - 20
 	root.add_child(side)
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	side.add_child(sc)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 14)
+	v.add_theme_constant_override("separation", 10)
 	sc.add_child(v)
 	# рука
 	var hs := _section("Ваша рука")
-	hand_name = _label("Старшая карта", "TitleLabel", 30)
+	hand_name = _label("Старшая карта", "TitleLabel", 26)
 	hand_bonus = _label("без бонуса", "MutedLabel")
 	hand_cards = HFlowContainer.new()
 	hand_cards.add_theme_constant_override("h_separation", 4)
 	hs.add_child(hand_name); hs.add_child(hand_cards); hs.add_child(hand_bonus)
 	v.add_child(hs)
+	v.add_child(HSeparator.new())
 	# союзы
 	var ts := _section("Союзы стихий")
 	traits_grid = GridContainer.new()
@@ -181,6 +180,7 @@ func _build_side() -> void:
 	traits_grid.add_theme_constant_override("v_separation", 6)
 	ts.add_child(traits_grid)
 	v.add_child(ts)
+	v.add_child(HSeparator.new())
 	# карта
 	var cs := _section("Карта")
 	info_box = VBoxContainer.new()
@@ -189,24 +189,25 @@ func _build_side() -> void:
 	info_tex.custom_minimum_size = Vector2(96, 134)
 	info_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	info_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	info_title = _label("", "HeaderLabel", 19)
+	info_title = _label("", "TitleLabel", 17)
 	info_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ih.add_child(info_tex); ih.add_child(info_title)
-	info_text = _label("Наведите на карту, чтобы увидеть способность.", "", 16)
+	info_text = _label("Наведите на карту, чтобы увидеть способность.", "", 15)
 	info_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_text.custom_minimum_size.x = SIDE_W - 70
+	info_text.custom_minimum_size.x = SIDE_W - 50
 	info_box.add_child(ih); info_box.add_child(info_text)
 	cs.add_child(info_box)
 	v.add_child(cs)
+	v.add_child(HSeparator.new())
 	# журнал
 	var ls := _section("Журнал боя")
 	log_box = RichTextLabel.new()
 	log_box.bbcode_enabled = true
 	log_box.fit_content = true
 	log_box.scroll_active = false
-	log_box.custom_minimum_size = Vector2(SIDE_W - 70, 60)
-	log_box.add_theme_font_size_override("normal_font_size", 15)
+	log_box.custom_minimum_size = Vector2(SIDE_W - 50, 60)
+	log_box.add_theme_font_size_override("normal_font_size", 14)
 	log_box.add_theme_color_override("default_color", UiTheme.MUTED)
 	ls.add_child(log_box)
 	v.add_child(ls)
@@ -214,28 +215,28 @@ func _build_side() -> void:
 func _build_bottom() -> void:
 	bottom = PanelContainer.new()
 	bottom.anchor_left = 0; bottom.anchor_right = 1; bottom.anchor_top = 1; bottom.anchor_bottom = 1
-	bottom.offset_top = -BOTTOM_H; bottom.offset_right = -SIDE_W
+	bottom.offset_top = -BOTTOM_H - 10; bottom.offset_bottom = -10; bottom.offset_left = 10; bottom.offset_right = -10
 	root.add_child(bottom)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 16)
 	bottom.add_child(h)
 	# экономика
 	var econ := VBoxContainer.new()
-	econ.custom_minimum_size.x = 200
+	econ.custom_minimum_size.x = 190
 	econ.add_theme_constant_override("separation", 4)
 	var gh := HBoxContainer.new()
 	var coin := TextureRect.new()
 	coin.texture = UiTheme.icon("coin")
-	coin.custom_minimum_size = Vector2(40, 40)
+	coin.custom_minimum_size = Vector2(32, 32)
 	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	lbl_gold = _label("0", "TitleLabel", 38)
+	lbl_gold = _label("0", "TitleLabel", 34)
 	lbl_income = _label("", "MutedLabel")
 	gh.add_child(coin); gh.add_child(lbl_gold); gh.add_child(lbl_income)
-	lbl_level = _label("Уровень 1 · поле до 2 карт", "", 16)
+	lbl_level = _label("Уровень 1 · поле до 2 карт", "", 15)
 	bar_xp = ProgressBar.new()
 	bar_xp.theme_type_variation = "XpBar"
-	bar_xp.custom_minimum_size = Vector2(190, 14)
+	bar_xp.custom_minimum_size = Vector2(180, 8)
 	bar_xp.show_percentage = false
 	lbl_xp = _label("", "MutedLabel")
 	lbl_odds = RichTextLabel.new()
@@ -243,7 +244,8 @@ func _build_bottom() -> void:
 	lbl_odds.fit_content = true
 	lbl_odds.scroll_active = false
 	lbl_odds.custom_minimum_size = Vector2(200, 22)
-	lbl_odds.add_theme_font_size_override("normal_font_size", 14)
+	lbl_odds.add_theme_font_size_override("normal_font_size", 13)
+	lbl_odds.custom_minimum_size = Vector2(200, 22)
 	econ.add_child(gh); econ.add_child(lbl_level); econ.add_child(bar_xp); econ.add_child(lbl_xp); econ.add_child(lbl_odds)
 	h.add_child(econ)
 	# кнопки магазина
@@ -254,7 +256,7 @@ func _build_bottom() -> void:
 	for spec in [["reroll", "Обновить  2", "BlueButton"], ["xp", "Опыт +4  4", "BlueButton"], ["lock", "Закрепить", ""],
 			["sell", "Продать", ""], ["allin", "Ва-банк", "RedButton"], ["fight", "В бой!", "GoldButton"]]:
 		var b := _btn(spec[1], spec[0], spec[2])
-		b.custom_minimum_size = Vector2(160, 58)
+		b.custom_minimum_size = Vector2(140, 46)
 		btns[spec[0]] = b
 		shop_grid.add_child(b)
 	h.add_child(shop_grid)
@@ -265,7 +267,7 @@ func _build_bottom() -> void:
 	speed_grid.add_theme_constant_override("v_separation", 8)
 	for spec in [["speed", "Скорость ×1", 1], ["speed", "Скорость ×2", 2], ["speed", "Скорость ×4", 4], ["skip", "Пропустить", null]]:
 		var b := _btn(spec[1], spec[0], "", spec[2])
-		b.custom_minimum_size = Vector2(160, 58)
+		b.custom_minimum_size = Vector2(140, 46)
 		btns["%s%s" % [spec[0], str(spec[2]) if spec[2] != null else ""]] = b
 		speed_grid.add_child(b)
 	speed_grid.visible = false
@@ -276,13 +278,13 @@ func _build_bottom() -> void:
 	shop_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	for i in 5:
-		var tb := _card_button("buy", i)
+		var tb := _card_button("buy", i, 128)
 		shop_buttons.append(tb)
 		shop_box.add_child(tb)
 	var sep := VSeparator.new()
 	shop_box.add_child(sep)
 	for i in 2:
-		var tb := _card_button("buy_magic", i)
+		var tb := _card_button("buy_magic", i, 128)
 		magic_buttons.append(tb)
 		shop_box.add_child(tb)
 	h.add_child(shop_box)
@@ -308,13 +310,13 @@ func _build_hand() -> void:
 	var v := VBoxContainer.new()
 	v.position = Vector2(16, TOP_H + 10)
 	root.add_child(v)
-	hand_title = _label("Рука магии 0/5", "HeaderLabel", 18)
+	hand_title = _label("Рука магии 0/5", "HeaderLabel", 16)
 	v.add_child(hand_title)
 	hand_box = HBoxContainer.new()
 	hand_box.add_theme_constant_override("separation", 6)
 	v.add_child(hand_box)
 	for i in Data.HAND_MAX:
-		var tb := _card_button("hand", i, 84)
+		var tb := _card_button("hand", i, 78)
 		hand_buttons.append(tb)
 		hand_box.add_child(tb)
 
@@ -325,13 +327,13 @@ func _build_misc() -> void:
 	hint.offset_top = TOP_H + 12
 	hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hint_lbl = _label("", "", 18)
+	hint_lbl = _label("", "", 16)
 	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint_lbl.custom_minimum_size.x = 560
+	hint_lbl.custom_minimum_size.x = 520
 	hint.add_child(hint_lbl)
 	root.add_child(hint)
-	step_lbl = _label("", "TitleLabel", 30)
+	step_lbl = _label("", "TitleLabel", 24)
 	step_lbl.anchor_left = 0.5; step_lbl.anchor_right = 0.5
 	step_lbl.offset_top = TOP_H + 70
 	step_lbl.offset_left = -200; step_lbl.offset_right = 200 - SIDE_W
@@ -339,7 +341,7 @@ func _build_misc() -> void:
 	step_lbl.add_theme_constant_override("outline_size", 10)
 	step_lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.03))
 	root.add_child(step_lbl)
-	banner = _label("", "TitleLabel", 64)
+	banner = _label("", "TitleLabel", 52)
 	banner.set_anchors_preset(Control.PRESET_CENTER)
 	banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	banner.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -396,7 +398,7 @@ func set_hand_info(hand_key: String, cards: Array, traits: Dictionary) -> void:
 		var d: Dictionary = Data.HEROES[u.id]
 		var p := PanelContainer.new()
 		p.theme_type_variation = "ChipPanel"
-		var l := _label(Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, "", 18)
+		var l := _label(Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, "TitleLabel", 17)
 		l.add_theme_color_override("font_color", Data.SUITS[d.s].color.lightened(0.35))
 		p.add_child(l)
 		hand_cards.add_child(p)
@@ -408,22 +410,22 @@ func set_hand_info(hand_key: String, cards: Array, traits: Dictionary) -> void:
 		var lv: int = traits.lv[s]
 		var cell := PanelContainer.new()
 		cell.theme_type_variation = "ChipPanel"
-		cell.custom_minimum_size = Vector2(140, 70)
+		cell.custom_minimum_size = Vector2(141, 66)
 		cell.modulate = Color.WHITE if lv > 0 else Color(1, 1, 1, 0.6)
 		var hb := HBoxContainer.new()
 		var em := TextureRect.new()
 		em.texture = UiTheme.icon("element_" + String(su.key))
-		em.custom_minimum_size = Vector2(34, 34)
+		em.custom_minimum_size = Vector2(26, 26)
 		em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		em.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 0)
-		var t := _label("%s %d/%d" % [su.name, n, 2 if n < 2 else 4], "", 16)
+		var t := _label("%s %d/%d" % [su.name, n, 2 if n < 2 else 4], "TitleLabel", 15)
 		t.add_theme_color_override("font_color", su.color.lightened(0.4))
 		var dsc := _label(Data.trait_text(s, max(lv, 1)), "MutedLabel", 13)
 		dsc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		dsc.custom_minimum_size.x = 84
+		dsc.custom_minimum_size.x = 92
 		vb.add_child(t); vb.add_child(dsc)
 		hb.add_child(em); hb.add_child(vb)
 		cell.add_child(hb)
@@ -527,7 +529,7 @@ func set_step(text: String) -> void:
 func toast(text: String, kind := "") -> void:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "TooltipPanel"
-	var l := _label(text, "", 17)
+	var l := _label(text, "", 16)
 	if kind == "bad":
 		l.add_theme_color_override("font_color", Color("ffb3a8"))
 	elif kind == "good":

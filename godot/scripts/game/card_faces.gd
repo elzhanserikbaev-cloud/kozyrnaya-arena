@@ -47,7 +47,7 @@ func _font(path: String, bold: bool) -> Font:
 		if ResourceLoader.exists(alt):
 			var fv := FontVariation.new()
 			fv.base_font = load(alt)
-			fv.variation_opentype = {"wght": 700 if bold else 400}
+			fv.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700 if bold else 400}
 			return fv
 	var sf := SystemFont.new()
 	sf.font_names = PackedStringArray(["Georgia" if bold else "Segoe UI", "DejaVu Sans"])
@@ -159,10 +159,10 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	_rect_tex(root, tex("res://assets/portraits/hero_%s.png" % id), PORTRAIT, su.color.darkened(0.4))
 	_rect_tex(root, tex("res://assets/cards/frame_%s_%d.png" % [el, star]), Rect2(0, 0, TW, TH), Color(0, 0, 0, 0))
 	# угловой медальон: ранг и стихия
-	_label(root, Rules.rank_label(int(d.r)) + su.sym, Rect2(CORNER_C - Vector2(40, 30), Vector2(80, 60)), f_title, 34, Color.WHITE,
+	_label(root, Rules.rank_label(int(d.r)) + su.sym, Rect2(CORNER_C - Vector2(44, 32), Vector2(88, 64)), f_bold, 38, Color.WHITE,
 		HORIZONTAL_ALIGNMENT_CENTER, 8, Color(0.06, 0.04, 0.03, 0.95))
 	# цена в октагоне
-	_centered(root, str(d.c), GEM_C, f_title, 36, Color("fff6dc"), 8)
+	_centered(root, str(d.c), GEM_C, f_bold, 40, Color("fff6dc"), 10)
 	# усиления — значки справа на портрете
 	for i in items.size():
 		var c := Vector2(PORTRAIT.end.x - 42, PORTRAIT.position.y + 44 + i * 80)
@@ -184,18 +184,18 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 			pip.position = Vector2(PORTRAIT.position.x + 98 + i * 34, PORTRAIT.position.y + 8)
 			pip.size = Vector2(26, 26)
 			root.add_child(pip)
-	_label(root, String(d.n).to_upper(), NAME_RECT, f_title, 36, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 9, Color(0.14, 0.07, 0.03, 0.95))
+	_label(root, String(d.n).to_upper(), NAME_RECT, f_bold, 36, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
 	# пергамент: название способности и её действие
 	var t := TEXT_RECT
 	_label(root, d.ab.n, Rect2(t.position, Vector2(t.size.x, 40)), f_title, 30, Color("5a1f12"), HORIZONTAL_ALIGNMENT_CENTER, 0)
-	var desc := _label(root, Data.ab_desc(id, star, fed), Rect2(t.position + Vector2(0, 42), t.size - Vector2(0, 46)), f_body, 26,
+	var desc := _label(root, Data.ab_desc(id, star, fed), Rect2(t.position + Vector2(0, 42), t.size - Vector2(0, 46)), f_body, 28,
 		Color("3a2614"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 4)
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	desc.remove_theme_color_override("font_shadow_color")
 	var st: Dictionary = Rules.stats({"id": id, "star": star, "fed": fed})
-	_centered(root, str(st.atk), ATK_C, f_title, 36 if str(st.atk).length() < 4 else 29, Color.WHITE, 9)
-	_centered(root, str(st.hp), HP_C, f_title, 36 if str(st.hp).length() < 4 else 29, Color.WHITE, 9)
-	_centered(root, str(d.mm), MANA_C, f_title, 28, Color("eef4ff"), 8)
+	_centered(root, str(st.atk), ATK_C, f_bold, 52 if str(st.atk).length() < 4 else 44, Color.WHITE, 14)
+	_centered(root, str(st.hp), HP_C, f_bold, 52 if str(st.hp).length() < 4 else 44, Color.WHITE, 14)
+	_centered(root, str(d.mm), MANA_C, f_bold, 36, Color("eef4ff"), 12)
 
 func _build_magic(root: Control, k: String, power_round: int) -> void:
 	var m: Dictionary = Data.MAGIC[k]
