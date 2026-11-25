@@ -1,7 +1,7 @@
 {
   "name": "kozyrnaya-arena",
   "productName": "Kozyrnaya Arena",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Козырная Арена — мрачный 3D карточный автобаттлер 21+: герои-карты, покерные руки, усиления и заклинания. Одиночная игра, по сети и онлайн.",
   "main": "main.js",
   "license": "UNLICENSED",

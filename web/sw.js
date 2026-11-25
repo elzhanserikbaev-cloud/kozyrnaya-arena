@@ -1,6 +1,6 @@
 // Офлайн-кэш браузерной версии (для установки «на экран Домой»).
 // Страница берётся из сети, чтобы приходили обновления; без интернета — из кэша.
-const CACHE = 'kozyrnaya-arena-1.3.0';
+const CACHE = 'kozyrnaya-arena-1.4.0';
 const FILES = ['./', './index.html', './babylon.js', './peerjs.min.js', './icons.js', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
