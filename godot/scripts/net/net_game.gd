@@ -350,6 +350,7 @@ func _c_lobby(list: Array, st: bool, _rn: int) -> void:
 		game._refresh_hud()
 
 func _c_start() -> void:
+	Sfx.music("game")
 	started = true
 	round_n = 1
 	view = "play"

@@ -2,11 +2,21 @@ extends Node
 ## Простые синтезированные звуки (без внешних файлов): мягкие «деревянные» щелчки, звон монет, удары.
 
 var enabled := true
+var music_on := true
+var _music: Array = []          # два плеера для плавного перехода
+var _music_cur := -1
+var _music_name := ""
+const MUSIC_DB := -11.0
 var _cache := {}
 var _players: Array = []
 const RATE := 22050
 
 func _ready() -> void:
+	for i in 2:
+		var mp := AudioStreamPlayer.new()
+		mp.volume_db = -80
+		add_child(mp)
+		_music.append(mp)
 	for i in 8:
 		var p := AudioStreamPlayer.new()
 		p.volume_db = -8
@@ -84,6 +94,38 @@ func _stream(name: String) -> AudioStreamWAV:
 	var s := _tone(parts)
 	_cache[name] = s
 	return s
+
+## Фоновая музыка: "menu" (главное меню) или "game" (партия). Плавный переход 1,6 с.
+func music(name: String) -> void:
+	if name == _music_name:
+		return
+	_music_name = name
+	if DisplayServer.get_name() == "headless":
+		return
+	var path := "res://assets/music/%s.ogg" % name
+	if not ResourceLoader.exists(path):
+		return
+	var nxt := 0 if _music_cur != 0 else 1
+	var p_new: AudioStreamPlayer = _music[nxt]
+	var st: AudioStream = load(path)
+	if st is AudioStreamOggVorbis:
+		(st as AudioStreamOggVorbis).loop = true
+	p_new.stream = st
+	p_new.volume_db = -60
+	p_new.play()
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(p_new, "volume_db", MUSIC_DB if (music_on and enabled) else -80.0, 1.6)
+	if _music_cur >= 0:
+		var p_old: AudioStreamPlayer = _music[_music_cur]
+		tw.tween_property(p_old, "volume_db", -60.0, 1.6)
+		tw.chain().tween_callback(p_old.stop)
+	_music_cur = nxt
+
+func set_music_enabled(on: bool) -> void:
+	music_on = on
+	if _music_cur >= 0:
+		var p: AudioStreamPlayer = _music[_music_cur]
+		create_tween().tween_property(p, "volume_db", MUSIC_DB if (music_on and enabled) else -80.0, 0.5)
 
 func play(name: String) -> void:
 	if not enabled or DisplayServer.get_name() == "headless":

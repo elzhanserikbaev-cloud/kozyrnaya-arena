@@ -15,3 +15,6 @@ Authors: carl-olsen, caro-asercion, cathelineau, darkzaitzev, delapouite, lorc, 
 - **Philosopher Bold** — Copyright 2011 The Philosopher Project Authors (https://github.com/alexeiva/philosopher). License: `fonts/OFL-Philosopher.txt`.
 - **Rubik** (variable, `Rubik[wght].ttf`) — Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik). License: `fonts/OFL-Rubik.txt`.
 Fonts downloaded from https://github.com/google/fonts.
+
+## Музыка
+Оригинальная, синтезирована для игры скриптом `godot/tools/music/compose.py` (numpy): `menu.ogg` и `game.ogg`, ре минор, общая тема.

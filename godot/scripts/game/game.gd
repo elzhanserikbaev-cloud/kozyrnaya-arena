@@ -34,6 +34,7 @@ func _ready() -> void:
 	m = Match.new()
 	m.new_game("normal")
 	_sync_all(false)
+	_load_settings()
 	_show_start()
 	_dev_args()
 
@@ -127,6 +128,14 @@ func _uitest() -> void:
 	print("rotate: yaw ", yaw0, " -> ", table.cam_yaw, " feed_mode=", not feed_state.is_empty())
 	var w: AudioStreamWAV = Sfx._stream("stone")
 	print("stone sound: ", w.get_length(), " s, ", w.data.size(), " bytes")
+	var mp: AudioStreamPlayer = Sfx._music[Sfx._music_cur]
+	var p0 := mp.get_playback_position()
+	await get_tree().create_timer(1.0).timeout
+	print("music: ", Sfx._music_name, " playing=", mp.playing, " pos ", snappedf(p0, 0.01), " -> ", snappedf(mp.get_playback_position(), 0.01), " len ", snappedf(mp.stream.get_length(), 0.1), " vol ", snappedf(mp.volume_db, 0.1), " loop=", (mp.stream as AudioStreamOggVorbis).loop)
+	Sfx.music("game")
+	await get_tree().create_timer(2.0).timeout
+	var g: AudioStreamPlayer = Sfx._music[Sfx._music_cur]
+	print("music after switch: ", Sfx._music_name, " playing=", g.playing, " vol ", snappedf(g.volume_db, 0.1), " other playing=", (Sfx._music[1 - Sfx._music_cur] as AudioStreamPlayer).playing)
 	w.save_to_wav(OS.get_user_data_dir() + "/stone.wav")
 	get_tree().quit()
 
@@ -420,9 +429,21 @@ func _on_act(name: String, arg: Variant) -> void:
 				var k: String = m.p.hand[arg]
 				hud.show_info(CardFaces.magic_face(k, m.round_n), Data.MAGIC[k].n, Data.magic_desc(k, m.round_n))
 		"sound":
-			sound_on = not sound_on
-			Sfx.enabled = sound_on
-			hud.btn_sound.text = "Звук" if sound_on else "Без звука"
+			# по кругу: звук и музыка → без музыки → без звука
+			if sound_on and Sfx.music_on:
+				Sfx.set_music_enabled(false)
+				hud.btn_sound.text = "Без музыки"
+			elif sound_on:
+				sound_on = false
+				Sfx.enabled = false
+				Sfx.set_music_enabled(false)
+				hud.btn_sound.text = "Без звука"
+			else:
+				sound_on = true
+				Sfx.enabled = true
+				Sfx.set_music_enabled(true)
+				hud.btn_sound.text = "Звук"
+			_save_settings()
 		"rules":
 			_show_rules()
 		"side":
@@ -898,7 +919,23 @@ func _next_round() -> void:
 	_save()
 
 # =================== партия, сохранение ===================
+func _save_settings() -> void:
+	var f := FileAccess.open("user://settings.json", FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify({"sound": sound_on, "music": Sfx.music_on}))
+
+func _load_settings() -> void:
+	if not FileAccess.file_exists("user://settings.json"):
+		return
+	var j = JSON.parse_string(FileAccess.get_file_as_string("user://settings.json"))
+	if j is Dictionary:
+		sound_on = bool(j.get("sound", true))
+		Sfx.enabled = sound_on
+		Sfx.music_on = bool(j.get("music", true)) and sound_on
+		hud.btn_sound.text = "Без звука" if not sound_on else ("Звук" if Sfx.music_on else "Без музыки")
+
 func _new_game(diff: String) -> void:
+	Sfx.music("game")
 	for k in cards:
 		cards[k].queue_free()
 	cards.clear()
@@ -923,6 +960,7 @@ func _has_save() -> Dictionary:
 	return j if j is Dictionary and j.get("phase", "") == "shop" else {}
 
 func _load_game() -> void:
+	Sfx.music("game")
 	var d := _has_save()
 	for k in cards:
 		cards[k].queue_free()
@@ -959,6 +997,7 @@ func _button(text: String, action: String, arg: Variant = null, variation := "")
 	return b
 
 func _show_start() -> void:
+	Sfx.music("menu")
 	var v := _vbox(14)
 	var logo := TextureRect.new()
 	logo.texture = UiTheme.icon("title_logo")
@@ -1026,7 +1065,7 @@ const RULES_TEXT := """Магазин. Каждый раунд приносит 
 
 Бой идёт сам. Урон после поражения зависит от раунда и выживших врагов. У каждого 100 ОЗ: кто остался последним — забирает банк.
 
-Иконки героев и магии: game-icons.net (CC BY 3.0). Шрифты: Philosopher, Rubik (OFL)."""
+Иконки героев и магии: game-icons.net (CC BY 3.0). Шрифты: Philosopher, Rubik (OFL). Музыка написана для игры."""
 
 func _show_rules() -> void:
 	var v := _vbox(12)
