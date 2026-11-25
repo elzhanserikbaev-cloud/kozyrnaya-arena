@@ -2,7 +2,7 @@
 
 ![Козырная Арена](web/cover.jpg)
 
-Мрачный 3D карточный автобаттлер (21+) в духе автошахмат: подпольный турнир, где герои — игральные карты, поле — ваша покерная рука, а бой идёт сам. Игра на движке [Babylon.js](https://www.babylonjs.com/).
+3D карточный автобаттлер (21+) на движке [Godot 4.7](https://godotengine.org/) (с версии 2.0; исходники в `godot/`, старая веб-версия на Babylon.js — в `web/`) в духе автошахмат: подпольный турнир, где герои — игральные карты, поле — ваша покерная рука, а бой идёт сам. 
 
 **▶ Играть в браузере:** https://elzhanserikbaev-cloud.github.io/kozyrnaya-arena/
 **⬇ Скачать для Windows, macOS, Ubuntu, Android:** [последний релиз](https://github.com/elzhanserikbaev-cloud/kozyrnaya-arena/releases/latest)

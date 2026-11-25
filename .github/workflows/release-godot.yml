@@ -1,0 +1,238 @@
+name: Release (Godot 2.x)
+
+# Козырная Арена 2.x (Godot 4.7.2): экспорт Windows / Linux / macOS / Android / Web,
+# публикация релиза и веб-версии на GitHub Pages. Запускается тегом v2.* (например v2.0.0).
+#
+# Веб-версия кладётся в релиз (…-Web.zip), а на Pages её выкладывает pages.yml (запускается отсюда из main).
+on:
+  push:
+    tags: ['v2.*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Опубликовать релиз и Pages (иначе только собрать артефакты)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_TAG: 4.7.2-stable
+  GODOT_TPL_DIR: 4.7.2.stable
+  WEBRTC_URL: https://github.com/godotengine/webrtc-native/releases/download/1.2.2-stable/godot-extension-webrtc_native.zip
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF_NAME#v}"
+          else
+            VER=$(sed -n 's/^config\/version="\(.*\)"/\1/p' godot/project.godot)
+          fi
+          IFS=. read -r MA MI PA <<< "$VER"
+          CODE=$(( MA * 10000 + MI * 100 + ${PA%%[^0-9]*} ))
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "VCODE=$CODE" >> "$GITHUB_ENV"
+          echo "Версия $VER, versionCode $CODE"
+          # Только в рабочей копии CI: версия проекта и Android versionCode = из тега
+          sed -i "s/^config\/version=.*/config\/version=\"$VER\"/" godot/project.godot
+          sed -i "s/^version\/code=.*/version\/code=$CODE/" godot/export_presets.cfg
+
+      - name: Кэш Godot и шаблонов экспорта
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-bin
+            ~/.local/share/godot/export_templates/${{ env.GODOT_TPL_DIR }}
+          key: godot-${{ env.GODOT_TAG }}-linux-templates
+
+      - name: Скачать Godot и шаблоны
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/$GODOT_TAG"
+          mkdir -p ~/godot-bin ~/.local/share/godot/export_templates
+          curl -fsSL --retry 3 -o /tmp/godot.zip "$BASE/Godot_v${GODOT_TAG}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot-bin
+          mv ~/godot-bin/Godot_v${GODOT_TAG}_linux.x86_64 ~/godot-bin/godot
+          curl -fsSL --retry 3 -o /tmp/tpl.tpz "$BASE/Godot_v${GODOT_TAG}_export_templates.tpz"
+          unzip -q /tmp/tpl.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates ~/.local/share/godot/export_templates/$GODOT_TPL_DIR
+          rm -rf /tmp/godot.zip /tmp/tpl.tpz /tmp/tpl
+
+      - name: Godot в PATH
+        run: |
+          chmod +x ~/godot-bin/godot
+          echo "$HOME/godot-bin" >> "$GITHUB_PATH"
+          ls ~/.local/share/godot/export_templates/$GODOT_TPL_DIR | head -50
+
+      - name: Аддон webrtc_native 1.2.2
+        run: |
+          curl -fsSL --retry 3 -o /tmp/webrtc.zip "$WEBRTC_URL"
+          unzip -q -o /tmp/webrtc.zip -d godot
+          test -f godot/addons/webrtc_native/webrtc_native.gdextension
+          ls godot/addons/webrtc_native/lib
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "build-tools;35.0.1" "platforms;android-35" > /dev/null
+          echo "ANDROID_SDK=$SDK" >> "$GITHUB_ENV"
+
+      - name: Ключи Android и настройки редактора
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          K="$RUNNER_TEMP/keys"; mkdir -p "$K"
+          keytool -genkeypair -keystore "$K/debug.keystore" -storetype PKCS12 -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" > /dev/null
+          if [ -n "${KS_B64:-}" ] && [ -n "${KS_PASS:-}" ]; then
+            echo "$KS_B64" | base64 -d > "$K/release.p12"
+            REL_USER=upload; REL_PASS="$KS_PASS"
+            echo "Подпись постоянным ключом (секреты ANDROID_KEYSTORE_*)"
+          else
+            echo "::warning::Нет секретов ANDROID_KEYSTORE_B64/ANDROID_KEYSTORE_PASS: APK подписан временным ключом (обновление поверх старой версии не встанет)"
+            REL_USER=tmp; REL_PASS=temppass
+            keytool -genkeypair -keystore "$K/release.p12" -storetype PKCS12 -storepass "$REL_PASS" -keypass "$REL_PASS" \
+              -alias tmp -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Kozyrnaya Arena" > /dev/null
+          fi
+          echo "::add-mask::$REL_PASS"
+          {
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$K/debug.keystore"
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey"
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$K/release.p12"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$REL_USER"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$REL_PASS"
+          } >> "$GITHUB_ENV"
+          # Настройки редактора Godot 4.7 (пути к SDK/JDK и debug-ключ)
+          CFG=~/.config/godot; mkdir -p "$CFG"
+          cat > "$CFG/editor_settings-4.7.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$K/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          cat "$CFG/editor_settings-4.7.tres"
+
+      - name: Значок приложения
+        run: |
+          # Экспорт macOS без значка падает; если запечённого значка ещё нет — берём старый build/icon.png
+          if [ ! -f godot/assets/icon.png ]; then
+            echo "::warning::нет godot/assets/icon.png — используется build/icon.png"
+            cp build/icon.png godot/assets/icon.png
+          fi
+
+      - name: Импорт ресурсов
+        run: |
+          # Первый запуск строит .godot (кэш классов, список GDExtension); ошибки первого прохода не фатальны.
+          timeout 600 godot --headless --path godot --import || true
+          timeout 600 godot --headless --path godot --import
+          cat godot/.godot/extension_list.cfg || true
+
+      - name: Сетевые тесты (LAN, без интернета)
+        continue-on-error: true
+        run: timeout 120 godot --headless --path godot --script res://tests/test_net_lan.gd
+
+      - name: Экспорт
+        run: |
+          set -uo pipefail
+          mkdir -p export/{windows,linux,macos,android,web}
+          fail=0
+          do_export() {  # $1 — пресет, $2 — путь относительно godot/
+            echo "::group::Экспорт $1"
+            timeout 900 godot --headless --path godot --export-release "$1" "$2" 2>&1 | tee "export/$1.log"
+            if [ -f "godot/$2" ]; then echo "OK: $2"; else echo "::error::Экспорт $1 не создал $2"; fail=1; fi
+            echo "::endgroup::"
+          }
+          do_export "Windows" ../export/windows/KozyrnayaArena.exe
+          do_export "Linux"   ../export/linux/KozyrnayaArena.x86_64
+          do_export "macOS"   ../export/macos/KozyrnayaArena.zip
+          do_export "Android" ../export/android/KozyrnayaArena.apk
+          do_export "Web"     ../export/web/index.html
+          ls -laR export | head -80
+          exit $fail
+
+      - name: Проверка macOS
+        run: |
+          unzip -l export/macos/KozyrnayaArena.zip | grep -E "MacOS/|Frameworks/|_CodeSignature" | head -20
+          unzip -l export/macos/KozyrnayaArena.zip | grep -q "Contents/_CodeSignature/CodeResources"             || echo "::warning::macOS .app без подписи (ad-hoc) — на Apple Silicon может не запуститься"
+
+      - name: Проверка APK
+        run: |
+          BT=$(ls -d "$ANDROID_SDK"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs export/android/KozyrnayaArena.apk | head -3
+          "$BT/aapt2" dump badging export/android/KozyrnayaArena.apk | head -3 || true
+
+      - name: Упаковка
+        run: bash build/godot/package.sh "$VER" export dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-release
+          if-no-files-found: error
+          path: dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-web
+          if-no-files-found: error
+          path: export/web
+
+  release:
+    needs: export
+    permissions:
+      contents: write
+      actions: write
+    if: startsWith(github.ref, 'refs/tags/v2.') || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: godot-release
+          path: out
+      - name: Публикация релиза
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ needs.export.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          [[ "$GITHUB_REF" == refs/tags/* ]] || TAG="v$VER"
+          ls -la out
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # релиз уже создан (например, старым release.yml) — дозагружаем файлы и обновляем заметки
+            gh release upload "$TAG" out/* --clobber
+            gh release edit "$TAG" --title "Козырная Арена $TAG" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG" out/* --title "Козырная Арена $TAG" --notes-file RELEASE_NOTES.md --latest
+          fi
+          # сайт выкладывается из main (правило окружения github-pages): запускаем pages.yml
+          gh workflow run pages.yml --ref main

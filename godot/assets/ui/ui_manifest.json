@@ -1,0 +1,254 @@
+[
+ {
+  "file": "panel.png",
+  "margins": [
+   48,
+   48,
+   48,
+   48
+  ]
+ },
+ {
+  "file": "panel_dark.png",
+  "margins": [
+   38,
+   38,
+   38,
+   38
+  ]
+ },
+ {
+  "file": "btn_gold_normal.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_gold_hover.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_gold_pressed.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_gold_disabled.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_red_normal.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_red_hover.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_red_pressed.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_red_disabled.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_blue_normal.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_blue_hover.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_blue_pressed.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_blue_disabled.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_wood_normal.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_wood_hover.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_wood_pressed.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "btn_wood_disabled.png",
+  "margins": [
+   30,
+   28,
+   30,
+   28
+  ]
+ },
+ {
+  "file": "ribbon.png",
+  "margins": [
+   120,
+   0,
+   120,
+   0
+  ]
+ },
+ {
+  "file": "bar_frame.png",
+  "margins": [
+   22,
+   18,
+   22,
+   18
+  ]
+ },
+ {
+  "file": "bar_fill_hp.png",
+  "margins": [
+   13,
+   13,
+   13,
+   13
+  ]
+ },
+ {
+  "file": "bar_fill_foe.png",
+  "margins": [
+   13,
+   13,
+   13,
+   13
+  ]
+ },
+ {
+  "file": "bar_fill_mana.png",
+  "margins": [
+   13,
+   13,
+   13,
+   13
+  ]
+ },
+ {
+  "file": "bar_fill_xp.png",
+  "margins": [
+   13,
+   13,
+   13,
+   13
+  ]
+ },
+ {
+  "file": "slot.png",
+  "margins": [
+   40,
+   40,
+   40,
+   40
+  ]
+ },
+ {
+  "file": "slot_bench.png",
+  "margins": [
+   40,
+   40,
+   40,
+   40
+  ]
+ },
+ {
+  "file": "tooltip.png",
+  "margins": [
+   22,
+   22,
+   22,
+   22
+  ]
+ },
+ {
+  "file": "chip.png",
+  "margins": [
+   20,
+   18,
+   20,
+   18
+  ]
+ }
+]

@@ -1,0 +1,4 @@
+.godot/
+addons/webrtc_native/
+export/
+*.tmp

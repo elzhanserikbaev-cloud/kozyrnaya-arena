@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Козырная Арена
+Name[en]=Kozyrnaya Arena
+Comment=3D карточный автобаттлер с покерными комбинациями и стихиями
+Exec=KozyrnayaArena.x86_64
+Icon=kozyrnaya-arena
+Terminal=false
+Categories=Game;CardGame;StrategyGame;
+StartupWMClass=Godot

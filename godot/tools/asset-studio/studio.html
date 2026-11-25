@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Козырная Арена — asset studio</title>
+<style>
+  body { margin: 0; background: #2a2a2e; color: #ddd; font: 14px sans-serif; }
+  #gal { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; }
+  figure { margin: 0; background: repeating-conic-gradient(#555 0 25%, #444 0 50%) 0 0/16px 16px; }
+  figcaption { background: #111; padding: 2px 6px; font-size: 12px; }
+  canvas { display: block; max-width: 360px; height: auto; }
+</style>
+</head>
+<body>
+<div id="gal"></div>
+<!-- game-icons.net path data (CC BY 3.0), shared with the web version -->
+<script src="../../../web/icons.js"></script>
+<script src="lib.js"></script>
+<script src="cards.js"></script>
+<script src="cards_stone.js"></script>
+<script src="art.js"></script>
+<script src="ui.js"></script>
+<script src="table.js"></script>
+<script>
+'use strict';
+// registry is filled by the art files via reg(path, fn)
+window.STUDIO = {
+  ready: false,
+  list: () => REG.map(r => r.path),
+  async render(path) {
+    const r = REG.find(r => r.path === path); if (!r) throw new Error('no asset ' + path);
+    const c = r.fn();
+    return c.toDataURL('image/png').split(',')[1];
+  },
+};
+(async () => {
+  const fonts = [['Philosopher', 'Philosopher-Bold.ttf', { weight: '700' }], ['Rubik', 'Rubik[wght].ttf', { weight: '300 900' }]];
+  for (const [fam, file, desc] of fonts) { const f = new FontFace(fam, `url("../../assets/fonts/${encodeURIComponent(file)}")`, desc); await f.load(); document.fonts.add(f); }
+  await document.fonts.ready;
+  STUDIO.ready = true;
+  const q = new URLSearchParams(location.search).get('view');
+  if (q !== null) for (const r of REG.filter(r => r.path.includes(q))) { const f = document.createElement('figure'); const c = r.fn(); f.appendChild(c); const cap = document.createElement('figcaption'); cap.textContent = r.path; f.appendChild(cap); gal.appendChild(f); }
+})();
+</script>
+</body>
+</html>

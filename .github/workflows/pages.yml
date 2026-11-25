@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -21,10 +22,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Сборка сайта
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          # Godot-версия (2.x) из последнего релиза; классическая браузерная версия — в /classic/
+          if gh release download --repo "$GITHUB_REPOSITORY" --pattern '*-Web.zip' --dir dl 2>/dev/null; then
+            unzip -q dl/*-Web.zip -d site
+            mkdir -p site/classic
+            cp -r web/. site/classic/
+          else
+            cp -r web/. site/
+          fi
+          touch site/.nojekyll
+          ls -la site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: site
 
   deploy:
     needs: build
