@@ -100,6 +100,26 @@ func _log_line(t: String) -> void:
 		if f:
 			f.seek_end(); f.store_line(t)
 
+## Автотест: после боя (с «Пропустить») ни одна карта не лежит и не затемнена.
+func _battletest() -> void:
+	await get_tree().create_timer(1.5).timeout
+	_on_act("speed", 4)
+	_fight()
+	await get_tree().create_timer(0.6).timeout
+	skip_battle = true
+	await get_tree().create_timer(4.0).timeout
+	var bad := []
+	for k in cards:
+		var c: Card3D = cards[k]
+		var standing := absf(c.pivot.rotation.x - (-PI / 2 + Card3D.TILT)) < 0.01
+		if not standing or c._dim < 0.99 or c.scale.distance_to(Vector3.ONE) > 0.01:
+			bad.append([k, snappedf(c.pivot.rotation.x, 0.01), c._dim])
+	print("after battle: phase=", m.phase, " cards=", cards.size(), " not standing: ", bad, " overlay=", hud.overlay.visible)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shot="):
+			get_viewport().get_texture().get_image().save_png(arg.substr(7))
+	get_tree().quit()
+
 ## Автотест: карты магазина не съезжают при быстром наведении; правая кнопка с движением вращает арену, щелчок — жертва.
 func _uitest() -> void:
 	hud.show_overlay(null)
@@ -184,6 +204,8 @@ func _dev_args() -> void:
 		elif a == "--menu": menu = true
 		elif a == "--dragtest": _dragtest()
 		elif a == "--uitest": _uitest()
+		elif a == "--battletest": _battletest()
+		elif a == "--continue": _on_act("continue", null)
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
@@ -273,6 +295,7 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 				else:
 					c.position = w.pos
 		c.set_meta("u", u)
+		c.home_pos = w.pos
 		var st := Rules.stats(u)
 		var hd: Dictionary = Data.HEROES[u.id]
 		c.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55), int(u.star), String(hd.n))
@@ -311,8 +334,8 @@ func _refresh_hud() -> void:
 	if p.allin: chips.append("Ва-банк!")
 	var bt := m.bounty_text()
 	if bt != "": chips.append(bt)
-	if int(p.streak) >= 2: chips.append("Серия побед: %d" % p.streak)
-	elif int(p.streak) <= -2: chips.append("Серия поражений: %d" % -int(p.streak))
+	if int(p.streak) >= 2: chips.append("Побед подряд: %d" % p.streak)
+	elif int(p.streak) <= -2: chips.append("Поражений подряд: %d" % -int(p.streak))
 	hud.set_chips(chips)
 	hud.set_hint(_step_hint())
 	_update_slots()
@@ -481,12 +504,18 @@ func _hero_text(id: String, star: int, fed) -> String:
 		t += "\nСъедено карт: %d из %d (+%d АТК, +%d ОЗ)." % [fed.n, Data.FEED_MAX, fed.atk, fed.hp]
 	return t
 
+var _hover_id := 0
+
 func _on_hover(c: Card3D) -> void:
+	_hover_id += 1
+	hud.hide_zoom()
 	if c == null or not c.has_meta("u") or not drag.is_empty():
-		hud.hide_zoom()
 		return
 	var u: Dictionary = c.get_meta("u")
-	hud.show_zoom_hero(u, table.screen_pos(c.global_position))
+	var my := _hover_id
+	get_tree().create_timer(0.45).timeout.connect(func():
+		if my == _hover_id and drag.is_empty() and is_instance_valid(c) and table.hovered == c 				and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			hud.show_zoom_hero(u, table.screen_pos(c.global_position)))
 	var d: Dictionary = Data.HEROES[u.id]
 	hud.show_info(CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed")),
 		"%s %s · %s%s" % [d.n, "★".repeat(int(u.star)), Rules.rank_label(int(d.r)), Data.SUITS[d.s].sym], _hero_text(u.id, int(u.star), u.get("fed")))
@@ -565,7 +594,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		if drag.moved:
 			var p: Vector3 = table.pick(mm.position).table_point
 			var c: Card3D = drag.card
-			c.position = Vector3(p.x, 0.5, p.z)
+			c.position = Vector3(p.x, 0.15, p.z)
 			var s := table.nearest_slot(p, ["board:", "bench:", "sell"])
 			for n in table.slots:
 				if String(n).begins_with("eboard"): continue
@@ -578,6 +607,8 @@ func _card_key(c: Card3D) -> String:
 	return ""
 
 func _press(pos: Vector2) -> void:
+	_hover_id += 1
+	hud.hide_zoom()
 	var hit := table.pick(pos)
 	var c: Card3D = hit.get("card")
 	# бой: выбор цели заклинания
@@ -614,7 +645,6 @@ func _press(pos: Vector2) -> void:
 		var loc = Rules.loc_of_uid(m.p, c.uid)
 		if not loc.is_empty():
 			drag = {"card": c, "from": loc, "start": pos, "moved": false}
-			c.set_tilt(false)
 
 func _release(pos: Vector2) -> void:
 	if drag.is_empty():
@@ -806,7 +836,7 @@ func _animate(evs: Array, b, my_tag: String) -> void:
 				await _wait(0.6)
 			"attack":
 				var t := _card_at_slot(int(e.tgt))
-				if c and t:
+				if c and t and not skip_battle:
 					c.lunge(t.position)
 					Sfx.play("hit")
 					await _wait(0.16)
@@ -860,10 +890,7 @@ func _mm(b, slot: int) -> int:
 
 func _after_battle(res: Dictionary) -> void:
 	for k in cards:
-		var c: Card3D = cards[k]
-		c.show_bars(false)
-		c.set_dim(1.0)
-		c.set_tilt(true)
+		(cards[k] as Card3D).reset_pose()
 	var o: String = res.outcome
 	Sfx.play("win" if o == "win" else ("lose" if o == "lose" else "draw"))
 	_refresh_hud()
@@ -876,7 +903,7 @@ func _after_battle(res: Dictionary) -> void:
 func _after_battle_net(r: Dictionary) -> void:
 	for k in cards:
 		var c: Card3D = cards[k]
-		c.show_bars(false); c.set_dim(1.0); c.set_tilt(true)
+		c.reset_pose()
 	var o: String = r.outcome
 	Sfx.play("win" if o == "win" else ("lose" if o == "lose" else "draw"))
 	_refresh_hud()

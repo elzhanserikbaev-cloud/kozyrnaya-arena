@@ -28,6 +28,8 @@ var _plate_mat: StandardMaterial3D
 var _dim := 1.0
 var _hp_ratio := 1.0
 var _move_tw: Tween
+var home_pos := Vector3.INF     # место карты на столе (куда возвращаться после выпада/боя)
+var _pose_tws: Array = []     # анимации позы (смерть, тряска, всплеск) — гасим при сбросе
 var atk_label: Label3D
 var hp_label_face: Label3D
 var rank_label: Label3D
@@ -226,29 +228,47 @@ func arc_to(pos: Vector3, dur := 0.45, height := 1.2) -> Tween:
 	return tw
 
 func lunge(target: Vector3, dur := 0.32) -> Tween:
-	var home := position
+	var home := home_pos if home_pos != Vector3.INF else position
 	var dir := (target - home)
 	dir.y = 0
 	var hit := home + dir.normalized() * minf(dir.length() * 0.55, 1.6) + Vector3(0, 0.25, 0)
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	tw.tween_property(self, "position", hit, dur * 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tw.tween_property(self, "position", home, dur * 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	return tw
 
+func _track(tw: Tween) -> Tween:
+	_pose_tws = _pose_tws.filter(func(t): return is_instance_valid(t) and t.is_running())
+	_pose_tws.append(tw)
+	return tw
+
+## Вернуть карту в обычное положение: стоит, не затемнена, без полосок, обычного размера.
+func reset_pose() -> void:
+	for t in _pose_tws:
+		if is_instance_valid(t):
+			t.kill()
+	_pose_tws.clear()
+	scale = Vector3.ONE
+	if home_pos != Vector3.INF:
+		position = home_pos
+	set_tilt(true)
+	set_dim(1.0)
+	show_bars(false)
+
 func shake(strength := 0.08) -> void:
 	var home := pivot.position
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	for i in 4:
 		tw.tween_property(pivot, "position", home + Vector3(randf_range(-strength, strength), 0, randf_range(-strength, strength) * 0.5), 0.04)
 	tw.tween_property(pivot, "position", home, 0.05)
 
 func pop(scale_to := 1.12) -> void:
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	tw.tween_property(self, "scale", Vector3.ONE * scale_to, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(self, "scale", Vector3.ONE, 0.18)
 
 func die() -> Tween:
-	var tw := create_tween().set_parallel(true)
+	var tw := _track(create_tween().set_parallel(true))
 	tw.tween_property(pivot, "rotation:x", -PI / 2, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(pivot, "position:y", 0.02, 0.35)
 	tw.tween_method(set_dim, _dim, 0.35, 0.4)
@@ -256,6 +276,9 @@ func die() -> Tween:
 	return tw
 
 func revive() -> void:
+	for t in _pose_tws:
+		if is_instance_valid(t):
+			t.kill()
 	set_tilt(true)
 	set_dim(1.0)
 	pop(1.15)
