@@ -17,4 +17,4 @@ Authors: carl-olsen, caro-asercion, cathelineau, darkzaitzev, delapouite, lorc, 
 Fonts downloaded from https://github.com/google/fonts.
 
 ## Музыка
-Оригинальная, синтезирована для игры скриптом `godot/tools/music/compose.py` (numpy): `menu.ogg` и `game.ogg`, ре минор, общая тема.
+Оригинальная, синтезирована для игры (numpy): `menu.ogg` — `godot/tools/music/compose.py`, `game.ogg` — `godot/tools/music/action.py`, ре минор, общая тема.
