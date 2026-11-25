@@ -42,12 +42,17 @@ func _nettest(role: String, ip: String, args: PackedStringArray) -> void:
 	auto_fast = true
 	for a in args:
 		if a.begins_with("--log="): _auto_log = a.substr(6)
-	_on_act("net", "lan")
+	var online := ip.begins_with("online")
+	_on_act("net", "online" if online else "lan")
 	net_game.my_name = "Ведущий" if role == "host" else "Клиент"
 	if role == "host":
 		net_game._host()
-		if not Net.is_active():
+		if not Net.is_active() or online:
 			await Net.connected
+		if online:
+			var f := FileAccess.open(_auto_log + ".code", FileAccess.WRITE)
+			f.store_string(Net.room_code); f.close()
+			print("nettest: room ", Net.room_code)
 		print("nettest: host up, waiting for client")
 		while net_game.players.size() < 2 or net_game.H.size() < 2:
 			await get_tree().create_timer(0.5).timeout
@@ -55,6 +60,11 @@ func _nettest(role: String, ip: String, args: PackedStringArray) -> void:
 		await get_tree().create_timer(1.0).timeout
 		net_game._host_start()
 		print("nettest: started")
+	elif online:
+		var cf := ip.substr(7)
+		while not FileAccess.file_exists(cf):
+			await get_tree().create_timer(0.5).timeout
+		net_game._join_online(FileAccess.get_file_as_string(cf).strip_edges())
 	else:
 		net_game._join_lan(ip, 8777)
 	var rng := Rng.new(777 if role == "host" else 999)
@@ -101,6 +111,8 @@ func _dev_args() -> void:
 		elif a == "--demo": demo = true
 		elif a == "--demofight": demo = true; demofight = true
 		elif a == "--menu": menu = true
+		elif a == "--nettest-host-online": _nettest("host", "online", args)
+		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
 		elif a.begins_with("--nettest-join="): _nettest("join", a.substr(15), args)
 	if demo:
