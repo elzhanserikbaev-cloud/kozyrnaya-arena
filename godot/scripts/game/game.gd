@@ -99,6 +99,37 @@ func _log_line(t: String) -> void:
 		if f:
 			f.seek_end(); f.store_line(t)
 
+## Автотест: карты магазина не съезжают при быстром наведении; правая кнопка с движением вращает арену, щелчок — жертва.
+func _uitest() -> void:
+	hud.show_overlay(null)
+	await get_tree().create_timer(1.0).timeout
+	var before: Array = hud.shop_buttons.map(func(b): return b.global_position)
+	for k in 30:
+		for b in hud.shop_buttons:
+			b.mouse_entered.emit()
+			await get_tree().process_frame
+			b.mouse_exited.emit()
+	await get_tree().create_timer(0.5).timeout
+	var after: Array = hud.shop_buttons.map(func(b): return b.global_position)
+	print("shop drift: ", before == after, " ", before[0], " -> ", after[0])
+	var yaw0 := table.cam_yaw
+	var p := Vector2(800, 420)
+	var ev := InputEventMouseButton.new(); ev.button_index = MOUSE_BUTTON_RIGHT; ev.pressed = true; ev.position = p
+	Input.parse_input_event(ev)
+	await get_tree().process_frame
+	for i in 10:
+		var mm := InputEventMouseMotion.new(); mm.position = p + Vector2(i * 12, 0); mm.relative = Vector2(12, 0); mm.button_mask = MOUSE_BUTTON_MASK_RIGHT
+		Input.parse_input_event(mm)
+		await get_tree().process_frame
+	var up := InputEventMouseButton.new(); up.button_index = MOUSE_BUTTON_RIGHT; up.pressed = false; up.position = p + Vector2(120, 0)
+	Input.parse_input_event(up)
+	await get_tree().create_timer(0.3).timeout
+	print("rotate: yaw ", yaw0, " -> ", table.cam_yaw, " feed_mode=", not feed_state.is_empty())
+	var w: AudioStreamWAV = Sfx._stream("stone")
+	print("stone sound: ", w.get_length(), " s, ", w.data.size(), " bytes")
+	w.save_to_wav(OS.get_user_data_dir() + "/stone.wav")
+	get_tree().quit()
+
 ## Автотест перетаскивания: настоящие события мыши через Input.
 func _dragtest() -> void:
 	hud.show_overlay(null)
@@ -143,6 +174,7 @@ func _dev_args() -> void:
 		elif a == "--demofight": demo = true; demofight = true
 		elif a == "--menu": menu = true
 		elif a == "--dragtest": _dragtest()
+		elif a == "--uitest": _uitest()
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
@@ -496,8 +528,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 			if mb.pressed: _press(mb.position)
 			elif _lp_fired: _lp_fired = false
 			else: _release(mb.position)
-		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-			_right(mb.position)
+		elif mb.button_index == MOUSE_BUTTON_RIGHT and not mb.pressed:
+			# правая кнопка: перетаскивание вращает арену, короткий щелчок — жертвоприношение
+			if not table.rotated:
+				_right(mb.position)
 	elif ev is InputEventMouseMotion and not drag.is_empty():
 		var mm := ev as InputEventMouseMotion
 		if (mm.position - drag.start).length() > 6:
@@ -914,7 +948,9 @@ func _button(text: String, action: String, arg: Variant = null, variation := "")
 	b.theme_type_variation = variation
 	b.custom_minimum_size = Vector2(0, 50)
 	b.focus_mode = Control.FOCUS_NONE
-	b.pressed.connect(func(): _on_act(action, arg))
+	b.pressed.connect(func():
+		Sfx.play("stone")
+		_on_act(action, arg))
 	return b
 
 func _show_start() -> void:

@@ -80,7 +80,9 @@ func _btn(text: String, action: String, variation := "", arg: Variant = null) ->
 	if variation != "":
 		b.theme_type_variation = variation
 	b.focus_mode = Control.FOCUS_NONE
-	b.pressed.connect(func(): act.emit(action, arg))
+	b.pressed.connect(func():
+		Sfx.play("stone")
+		act.emit(action, arg))
 	return b
 
 func _label(text := "", variation := "", size := 0) -> Label:
@@ -296,7 +298,9 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 	tb.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	tb.custom_minimum_size = Vector2(w, w * 1.4)
 	tb.focus_mode = Control.FOCUS_NONE
-	tb.pressed.connect(func(): act.emit(action, i))
+	tb.pressed.connect(func():
+		Sfx.play("stone_soft")
+		act.emit(action, i))
 	var big := w >= 100
 	for spec in [["st", Vector2(0.5, 0), HORIZONTAL_ALIGNMENT_CENTER], ["tl", Vector2(0, 0), HORIZONTAL_ALIGNMENT_LEFT], ["tr", Vector2(1, 0), HORIZONTAL_ALIGNMENT_RIGHT],
 			["bl", Vector2(0, 1), HORIZONTAL_ALIGNMENT_LEFT], ["br", Vector2(1, 1), HORIZONTAL_ALIGNMENT_RIGHT]]:
@@ -316,14 +320,20 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 		l.offset_top = 0.0 if spec[1].y == 0 else -24.0
 		l.offset_bottom = 24.0 if spec[1].y == 0 else 0.0
 		tb.add_child(l)
+	# наведение: лёгкое увеличение от нижнего края (масштаб, а не сдвиг — карта не «уплывает»)
+	tb.resized.connect(func(): tb.pivot_offset = Vector2(tb.size.x * 0.5, tb.size.y))
 	tb.mouse_entered.connect(func():
 		act.emit("hover_" + action, i)
+		if tb.has_meta("tw"): (tb.get_meta("tw") as Tween).kill()
 		var tw := tb.create_tween()
-		tw.tween_property(tb, "position:y", -10.0, 0.12).as_relative())
+		tw.tween_property(tb, "scale", Vector2(1.07, 1.07), 0.1)
+		tb.set_meta("tw", tw))
 	tb.mouse_exited.connect(func():
 		act.emit("hover_none", null)
+		if tb.has_meta("tw"): (tb.get_meta("tw") as Tween).kill()
 		var tw := tb.create_tween()
-		tw.tween_property(tb, "position:y", 10.0, 0.12).as_relative())
+		tw.tween_property(tb, "scale", Vector2.ONE, 0.1)
+		tb.set_meta("tw", tw))
 	return tb
 
 func _build_hand() -> void:

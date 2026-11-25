@@ -33,9 +33,40 @@ func _tone(parts: Array) -> AudioStreamWAV:
 	w.data = data
 	return w
 
+## Тяжёлый каменный «бум»: низкий удар с затуханием, глухой грохот (сглаженный шум) и короткий щелчок камня.
+func _stone(dur: float, f0: float, f1: float, vol: float) -> AudioStreamWAV:
+	var data := PackedByteArray()
+	var n := int(RATE * dur)
+	var phase := 0.0
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f: float = lerpf(f0, f1, minf(1.0, t / dur))
+		phase += TAU * f / RATE
+		var thud := sin(phase) * exp(-t * 14.0)
+		var wn := randf_range(-1.0, 1.0)
+		lp += (wn - lp) * 0.06
+		lp2 += (lp - lp2) * 0.25
+		var rumble := lp2 * 3.2 * exp(-t * 9.0)
+		var click := wn * exp(-t * 160.0) * 0.35
+		var env := minf(1.0, t * 400.0)
+		var s: float = (thud * 0.85 + rumble + click) * env * vol
+		var v: int = int(clampf(s, -1.0, 1.0) * 32000)
+		data.append(v & 0xFF); data.append((v >> 8) & 0xFF)
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = RATE
+	w.data = data
+	return w
+
 func _stream(name: String) -> AudioStreamWAV:
 	if _cache.has(name):
 		return _cache[name]
+	if name == "stone" or name == "stone_soft":
+		var st := _stone(0.42, 82.0, 46.0, 0.78) if name == "stone" else _stone(0.26, 120.0, 70.0, 0.6)
+		_cache[name] = st
+		return st
 	var parts: Array = {
 		"buy": [[880, 1320, 0.09, 0.5, 0.0], [1320, 1760, 0.12, 0.4, 0.0]],
 		"sell": [[700, 500, 0.12, 0.5, 0.0]],

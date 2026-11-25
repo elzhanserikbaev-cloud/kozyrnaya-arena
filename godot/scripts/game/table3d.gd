@@ -236,6 +236,7 @@ func _update_camera() -> void:
 
 # ---------- ввод ----------
 var _rot_drag := false
+var rotated := false            # с последнего нажатия правой кнопки камеру повернули
 
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev is InputEventMouseButton:
@@ -246,9 +247,14 @@ func _unhandled_input(ev: InputEvent) -> void:
 			cam_dist = clampf(cam_dist * 1.06, 8.0, 20.0); _update_camera()
 		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
 			_rot_drag = mb.pressed
+		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
+			rotated = false
 	elif ev is InputEventMouseMotion:
 		var mm := ev as InputEventMouseMotion
-		if _rot_drag:
+		var right_held := (mm.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0
+		if right_held and mm.relative.length() > 0.0:
+			rotated = rotated or mm.relative.length() > 2.0
+		if _rot_drag or right_held:
 			cam_yaw = clampf(cam_yaw - mm.relative.x * 0.005, -0.7, 0.7)
 			cam_pitch = clampf(cam_pitch - mm.relative.y * 0.004, 0.25, 1.1)
 			_update_camera()

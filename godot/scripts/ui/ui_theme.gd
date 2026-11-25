@@ -100,37 +100,31 @@ static func build() -> Theme:
 	theme.set_type_variation("MutedLabel", "Label")
 	theme.set_color("font_color", "MutedLabel", MUTED)
 	theme.set_font_size("font_size", "MutedLabel", 15)
-	# Кнопки
-	_button("Button", Color("2a3442"), TEXT)
-	_button("WoodButton", Color("2a3442"), TEXT)
-	_button("GoldButton", GOLD, Color("1d1406"))
-	_button("RedButton", Color("c4463c"), Color.WHITE)
-	_button("BlueButton", Color("2f7fa8"), Color.WHITE)
+	# Кнопки — каменные, как рамки карт и борт арены
+	_stone_button("Button", "slate", TEXT)
+	_stone_button("WoodButton", "slate", TEXT)
+	_stone_button("GoldButton", "gold", Color("2a1804"))
+	_stone_button("RedButton", "red", Color.WHITE)
+	_stone_button("BlueButton", "blue", Color.WHITE)
 	theme.set_font_size("font_size", "GoldButton", 20)
 	# Прозрачные кнопки для верхней панели
-	theme.set_type_variation("GhostButton", "Button")
-	var gpad := Vector4(14, 7, 14, 7)
-	theme.set_stylebox("normal", "GhostButton", flat(Color(1, 1, 1, 0.0), 10, Color(1, 1, 1, 0.12), 1, gpad, 0))
-	theme.set_stylebox("hover", "GhostButton", flat(Color(1, 1, 1, 0.07), 10, Color(1, 1, 1, 0.2), 1, gpad, 0))
-	theme.set_stylebox("pressed", "GhostButton", flat(Color(1, 1, 1, 0.12), 10, Color(1, 1, 1, 0.2), 1, gpad, 0))
-	theme.set_stylebox("focus", "GhostButton", StyleBoxEmpty.new())
-	theme.set_font("font", "GhostButton", f_medium)
+	_stone_button("GhostButton", "slate", TEXT)
 	theme.set_font_size("font_size", "GhostButton", 15)
-	for c in ["font_color", "font_hover_color", "font_pressed_color"]:
-		theme.set_color(c, "GhostButton", TEXT)
 	# Разделитель
 	theme.set_stylebox("separator", "HSeparator", flat(Color(1, 1, 1, 0.08), 0, Color(0, 0, 0, 0), 0, Vector4.ZERO, 0))
 	theme.set_constant("separation", "HSeparator", 14)
 	# Панели
-	theme.set_stylebox("panel", "PanelContainer", flat(Color(0.075, 0.09, 0.12, 0.92), 16, Color(1, 1, 1, 0.07), 1, Vector4(16, 14, 16, 14)))
+	theme.set_stylebox("panel", "PanelContainer", tex_box("panel_slate.png", [26, 26, 26, 26], Vector4(18, 16, 18, 16)))
 	theme.set_type_variation("ParchmentPanel", "PanelContainer")
-	theme.set_stylebox("panel", "ParchmentPanel", flat(Color(0.08, 0.1, 0.13, 0.97), 20, Color(1, 1, 1, 0.1), 1, Vector4(32, 28, 32, 28), 30))
+	theme.set_stylebox("panel", "ParchmentPanel", tex_box("panel_slate.png", [26, 26, 26, 26], Vector4(34, 30, 34, 30)))
 	theme.set_type_variation("ChipPanel", "PanelContainer")
-	theme.set_stylebox("panel", "ChipPanel", flat(Color(1, 1, 1, 0.06), 10, Color(1, 1, 1, 0.06), 1, Vector4(10, 6, 10, 6), 0))
+	theme.set_stylebox("panel", "ChipPanel", tex_box("chip_slate.png", [14, 14, 14, 14], Vector4(10, 5, 10, 5)))
 	theme.set_type_variation("TooltipPanel", "PanelContainer")
-	theme.set_stylebox("panel", "TooltipPanel", flat(Color(0.06, 0.07, 0.1, 0.92), 12, Color(1, 1, 1, 0.1), 1, Vector4(16, 10, 16, 10)))
+	theme.set_stylebox("panel", "TooltipPanel", tex_box("panel_slate.png", [26, 26, 26, 26], Vector4(18, 10, 18, 10)))
 	theme.set_type_variation("BarPanel", "PanelContainer")
-	theme.set_stylebox("panel", "BarPanel", flat(Color(0.06, 0.075, 0.1, 0.94), 0, Color(1, 1, 1, 0.06), 0, Vector4(18, 8, 18, 8), 12))
+	var bar := tex_box("bar_slate.png", [0, 2, 0, 4], Vector4(18, 6, 18, 9))
+	bar.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+	theme.set_stylebox("panel", "BarPanel", bar)
 	# Поля ввода
 	var le := flat(Color(1, 1, 1, 0.08), 12, Color(1, 1, 1, 0.14), 1, Vector4(14, 10, 14, 10), 0)
 	theme.set_stylebox("normal", "LineEdit", le)
@@ -156,6 +150,38 @@ static func build() -> Theme:
 	theme.set_stylebox("separator", "VSeparator", flat(Color(1, 1, 1, 0.1), 0, Color(0, 0, 0, 0), 0, Vector4.ZERO, 0))
 	theme.set_constant("separation", "VSeparator", 18)
 	return theme
+
+static func tex_box(file: String, m: Array, pad: Vector4) -> StyleBox:
+	var p := UI + file
+	if not ResourceLoader.exists(p):
+		return flat(Color(0.075, 0.09, 0.12, 0.92), 16, Color(1, 1, 1, 0.07), 1, pad)
+	var sb := StyleBoxTexture.new()
+	sb.texture = load(p)
+	sb.texture_margin_left = m[0]; sb.texture_margin_top = m[1]
+	sb.texture_margin_right = m[2]; sb.texture_margin_bottom = m[3]
+	sb.content_margin_left = pad.x; sb.content_margin_top = pad.y
+	sb.content_margin_right = pad.z; sb.content_margin_bottom = pad.w
+	return sb
+
+static func _stone_button(type: String, skin: String, col: Color) -> void:
+	if type != "Button":
+		theme.set_type_variation(type, "Button")
+	var pad := Vector4(18, 8, 18, 9)
+	var m := [18, 17, 18, 17]
+	theme.set_stylebox("normal", type, tex_box("sbtn_%s_normal.png" % skin, m, pad))
+	theme.set_stylebox("hover", type, tex_box("sbtn_%s_hover.png" % skin, m, pad))
+	theme.set_stylebox("pressed", type, tex_box("sbtn_%s_pressed.png" % skin, m, Vector4(pad.x, pad.y + 2, pad.z, pad.w - 2)))
+	theme.set_stylebox("disabled", type, tex_box("sbtn_%s_disabled.png" % skin, m, pad))
+	theme.set_stylebox("focus", type, StyleBoxEmpty.new())
+	theme.set_font("font", type, f_bold)
+	theme.set_font_size("font_size", type, 16)
+	theme.set_constant("outline_size", type, 0 if skin == "gold" else 4)
+	theme.set_color("font_outline_color", type, Color(0.03, 0.04, 0.06, 0.8))
+	theme.set_color("font_color", type, col)
+	theme.set_color("font_hover_color", type, col)
+	theme.set_color("font_pressed_color", type, col)
+	theme.set_color("font_focus_color", type, col)
+	theme.set_color("font_disabled_color", type, Color(1, 1, 1, 0.38))
 
 static func _button(type: String, bg: Color, col: Color) -> void:
 	if type != "Button":
