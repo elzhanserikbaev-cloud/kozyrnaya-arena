@@ -458,8 +458,8 @@ func set_econ(gold: int, income_text: String, level: int, xp: int, xp_need: int,
 	var cols := ["#c9bfae", "#7fc77a", "#6fa3e8", "#c07ad8", "#f0c24f"]
 	var parts := []
 	for i in 5:
-		parts.append("[color=%s]●[/color]%d%%" % [cols[i], o[i]])
-	lbl_odds.text = " ".join(parts)
+		parts.append("[color=%s]%d%%[/color]" % [cols[i], o[i]])
+	lbl_odds.text = "Шансы: " + "  ".join(parts)
 
 func set_shop(ids: Array, gold: int) -> void:
 	for i in shop_buttons.size():

@@ -175,8 +175,15 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	# съеденные карты — красные метки
 	if fed != null and int(fed.get("n", 0)) > 0:
 		for i in Data.FEED_MAX:
-			_label(root, "●" if i < int(fed.n) else "○", Rect2(PORTRAIT.position.x + 92 + i * 34, PORTRAIT.position.y + 4, 34, 34), f_bold, 30,
-				Color("c8303f") if i < int(fed.n) else Color("f3e6c8"), HORIZONTAL_ALIGNMENT_CENTER, 6, Color(0.1, 0.05, 0.03, 0.9), false)
+			var pip := Panel.new()
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color("c8303f") if i < int(fed.n) else Color(0.95, 0.9, 0.78, 0.35)
+			sb.set_corner_radius_all(13)
+			sb.border_color = Color("2a160c"); sb.set_border_width_all(3)
+			pip.add_theme_stylebox_override("panel", sb)
+			pip.position = Vector2(PORTRAIT.position.x + 98 + i * 34, PORTRAIT.position.y + 8)
+			pip.size = Vector2(26, 26)
+			root.add_child(pip)
 	_label(root, String(d.n).to_upper(), NAME_RECT, f_title, 36, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 9, Color(0.14, 0.07, 0.03, 0.95))
 	# пергамент: название способности и её действие
 	var t := TEXT_RECT
