@@ -298,7 +298,7 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 	tb.focus_mode = Control.FOCUS_NONE
 	tb.pressed.connect(func(): act.emit(action, i))
 	var big := w >= 100
-	for spec in [["tl", Vector2(0, 0), HORIZONTAL_ALIGNMENT_LEFT], ["tr", Vector2(1, 0), HORIZONTAL_ALIGNMENT_RIGHT],
+	for spec in [["st", Vector2(0.5, 0), HORIZONTAL_ALIGNMENT_CENTER], ["tl", Vector2(0, 0), HORIZONTAL_ALIGNMENT_LEFT], ["tr", Vector2(1, 0), HORIZONTAL_ALIGNMENT_RIGHT],
 			["bl", Vector2(0, 1), HORIZONTAL_ALIGNMENT_LEFT], ["br", Vector2(1, 1), HORIZONTAL_ALIGNMENT_RIGHT]]:
 		var l := Label.new()
 		l.name = spec[0]
@@ -311,8 +311,8 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 		l.anchor_left = spec[1].x; l.anchor_right = spec[1].x
 		l.anchor_top = spec[1].y; l.anchor_bottom = spec[1].y
 		var lw := 60.0
-		l.offset_left = 4.0 if spec[1].x == 0 else -lw - 4.0
-		l.offset_right = lw + 4.0 if spec[1].x == 0 else -4.0
+		l.offset_left = 4.0 if spec[1].x == 0 else (-lw - 4.0 if spec[1].x == 1 else -lw)
+		l.offset_right = lw + 4.0 if spec[1].x == 0 else (-4.0 if spec[1].x == 1 else lw)
 		l.offset_top = 0.0 if spec[1].y == 0 else -24.0
 		l.offset_bottom = 24.0 if spec[1].y == 0 else 0.0
 		tb.add_child(l)
@@ -517,9 +517,50 @@ func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
 ## Подписи на карточной кнопке: ранг (tl), цена (tr), АТК (bl), ОЗ (br).
 func _corner(tb: TextureButton, tl: String, tr: String, bl: String, br: String, tl_col: Color) -> void:
 	var a: Label = tb.get_node("tl"); a.text = tl; a.add_theme_color_override("font_color", tl_col)
+	(tb.get_node("st") as Label).text = ""
 	var b: Label = tb.get_node("tr"); b.text = tr; b.add_theme_color_override("font_color", UiTheme.GOLD)
 	var c: Label = tb.get_node("bl"); c.text = bl; c.add_theme_color_override("font_color", Color("ff9b8f"))
 	var d: Label = tb.get_node("br"); d.text = br; d.add_theme_color_override("font_color", Color("8ff0b0"))
+
+var zoom: TextureButton
+var zoom_box: Control
+
+func _build_zoom() -> void:
+	zoom_box = Control.new()
+	zoom_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	zoom_box.visible = false
+	root.add_child(zoom_box)
+	zoom = _card_button("zoom", 0, 250)
+	zoom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for l in zoom.get_children():
+		(l as Label).add_theme_font_size_override("font_size", 30)
+		(l as Label).add_theme_constant_override("outline_size", 10)
+		(l as Label).offset_top *= 1.4; (l as Label).offset_bottom *= 1.4
+	zoom_box.add_child(zoom)
+
+## Увеличенная карта героя рядом с курсором/картой (всё читается).
+func show_zoom_hero(u: Dictionary, near: Vector2) -> void:
+	if zoom == null:
+		_build_zoom()
+	var d: Dictionary = Data.HEROES[u.id]
+	var st: Dictionary = Rules.stats(u)
+	zoom.texture_normal = CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed"))
+	_corner(zoom, Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, str(d.c), str(st.atk), str(st.hp), Data.SUITS[d.s].color.lightened(0.45))
+	var sl: Label = zoom.get_node("st")
+	sl.text = "★".repeat(int(u.star)) if int(u.star) > 1 else ""
+	sl.add_theme_color_override("font_color", Color("ffd45a") if int(u.star) >= 3 else Color("eef3ff"))
+	var vs := root.get_viewport_rect().size
+	var sz := zoom.custom_minimum_size
+	var pos := near + Vector2(110, -sz.y * 0.6)
+	if pos.x + sz.x > vs.x - SIDE_W - 20:
+		pos.x = near.x - 110 - sz.x
+	pos.y = clampf(pos.y, TOP_H + 8, vs.y - BOTTOM_H - sz.y - 24)
+	zoom_box.position = pos
+	zoom_box.visible = true
+
+func hide_zoom() -> void:
+	if zoom_box:
+		zoom_box.visible = false
 
 func set_hand(keys: Array, round_n: int, selected := -1, battle := false) -> void:
 	hand_title.text = ("Рука магии · заклинаний за бой" if battle else "Рука магии %d/%d") % ([] if battle else [keys.size(), Data.HAND_MAX])

@@ -147,6 +147,10 @@ func _label(root: Control, text: String, r: Rect2, font: Font, size: int, col: C
 			fs -= 2
 		l.add_theme_font_size_override("font_size", fs)
 	root.add_child(l)
+	# после добавления Label может растянуться под текст — возвращаем ширину, чтобы перенос строк работал
+	l.custom_minimum_size = Vector2(r.size.x, 0)
+	l.size = r.size
+	l.clip_text = lines > 1
 	return l
 
 func _centered(root: Control, text: String, c: Vector2, font: Font, size: int, col: Color, outline := 8) -> void:
@@ -187,7 +191,7 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	# пергамент: название способности и её действие
 	var t := TEXT_RECT
 	_label(root, d.ab.n, Rect2(t.position, Vector2(t.size.x, 40)), f_title, 30, Color("5a1f12"), HORIZONTAL_ALIGNMENT_CENTER, 0)
-	var desc := _label(root, Data.ab_desc(id, star, fed), Rect2(t.position + Vector2(0, 42), t.size - Vector2(0, 46)), f_body, 28,
+	var desc := _label(root, Data.ab_desc(id, star, fed), Rect2(t.position + Vector2(6, 42), t.size - Vector2(12, 46)), f_body, 26,
 		Color("3a2614"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 4)
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	desc.remove_theme_color_override("font_shadow_color")

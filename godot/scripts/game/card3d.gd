@@ -31,6 +31,8 @@ var _move_tw: Tween
 var atk_label: Label3D
 var hp_label_face: Label3D
 var rank_label: Label3D
+var star_label: Label3D
+var name_label: Label3D
 
 static var _quad: QuadMesh
 
@@ -92,6 +94,11 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	hp_label_face = _stat_label(Vector2(400, 662), Color("dcffe6"))
 	rank_label = _stat_label(Vector2(70, 76), Color.WHITE)
 	rank_label.font_size = 64
+	star_label = _stat_label(Vector2(256, 22), Color("ffd45a"))
+	star_label.font_size = 92
+	star_label.outline_size = 26
+	name_label = _stat_label(Vector2(256, 385), Color("fff4d6"))
+	name_label.outline_size = 18
 	set_tilt(true)
 	return self
 
@@ -108,11 +115,16 @@ func _stat_label(px: Vector2, col: Color) -> Label3D:
 	pivot.add_child(l)
 	return l
 
-func set_stats(atk: int, hp: int, rank := "", rank_col := Color.WHITE) -> void:
+func set_stats(atk: int, hp: int, rank := "", rank_col := Color.WHITE, star := 1, title := "") -> void:
 	atk_label.text = str(atk)
 	hp_label_face.text = str(hp)
 	rank_label.text = rank
 	rank_label.modulate = rank_col
+	star_label.text = "★".repeat(star) if star > 1 else ""
+	star_label.modulate = Color("ffd45a") if star >= 3 else Color("eef3ff")
+	name_label.text = title.to_upper()
+	# подгоняем размер под ширину ленты (≈ 335 px при pixel_size 0.003)
+	name_label.font_size = clampi(int(335.0 / maxf(1.0, 0.66 * title.length())), 26, 54)
 
 ## Карта «стоит» с наклоном к камере (на столе) или лежит плашмя (в полёте/руке).
 func set_tilt(standing: bool) -> void:

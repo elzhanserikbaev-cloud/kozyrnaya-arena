@@ -163,6 +163,9 @@ func _dev_args() -> void:
 		for i in 5:
 			m.ai.board[i] = Rules.new_unit(eids[i])
 		_sync_all(false)
+	if demo and args.has("--hover"):
+		await get_tree().create_timer(1.5).timeout
+		_on_hover(cards["p:%d" % m.p.board[0].uid])
 	if demofight:
 		await get_tree().create_timer(2.0).timeout
 		_fight()
@@ -231,7 +234,7 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 		c.set_meta("u", u)
 		var st := Rules.stats(u)
 		var hd: Dictionary = Data.HEROES[u.id]
-		c.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55))
+		c.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55), int(u.star), String(hd.n))
 
 func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 	_sync_cards(animate, spawn_from)
@@ -421,9 +424,11 @@ func _hero_text(id: String, star: int, fed) -> String:
 	return t
 
 func _on_hover(c: Card3D) -> void:
-	if c == null or not c.has_meta("u"):
+	if c == null or not c.has_meta("u") or not drag.is_empty():
+		hud.hide_zoom()
 		return
 	var u: Dictionary = c.get_meta("u")
+	hud.show_zoom_hero(u, table.screen_pos(c.global_position))
 	var d: Dictionary = Data.HEROES[u.id]
 	hud.show_info(CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed")),
 		"%s %s · %s%s" % [d.n, "★".repeat(int(u.star)), Rules.rank_label(int(d.r)), Data.SUITS[d.s].sym], _hero_text(u.id, int(u.star), u.get("fed")))
