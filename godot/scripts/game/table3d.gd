@@ -23,7 +23,7 @@ var env: Environment
 var slots := {}                # "board:i" / "bench:i" / "sell" → MeshInstance3D
 var slot_mats := {}
 var hovered: Card3D
-var side_px := 320.0
+var side_px := 0.0
 var top_px := 50.0
 var bottom_px := 206.0
 

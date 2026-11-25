@@ -21,6 +21,9 @@ var lbl_me: Label
 var lbl_foe: Label
 var lbl_foe_name: Label
 var chips_box: HBoxContainer
+var hand_chip: Label
+var trait_chips: HBoxContainer
+var btn_side: Button
 var btn_sound: Button
 # боковая панель
 var hand_name: Label
@@ -101,11 +104,8 @@ func _build_top() -> void:
 	top.custom_minimum_size.y = TOP_H
 	root.add_child(top)
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 18)
+	h.add_theme_constant_override("separation", 12)
 	top.add_child(h)
-	var brand := _label("КОЗЫРНАЯ АРЕНА", "TitleLabel", 18)
-	brand.add_theme_color_override("font_color", UiTheme.GOLD)
-	h.add_child(brand)
 	var rp := PanelContainer.new()
 	rp.theme_type_variation = "ChipPanel"
 	rp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -114,11 +114,27 @@ func _build_top() -> void:
 	h.add_child(rp)
 	h.add_child(_hp_block(true))
 	h.add_child(_hp_block(false))
+	# покерная рука и союзы стихий — коротко, прямо в верхней полосе
+	var hp := PanelContainer.new()
+	hp.theme_type_variation = "ChipPanel"
+	hp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hp.tooltip_text = "Ваша покерная рука: комбинация из героев на линии боя и её бонус всему отряду."
+	hand_chip = _label("Старшая карта", "TitleLabel", 15)
+	hand_chip.add_theme_color_override("font_color", UiTheme.GOLD)
+	hp.add_child(hand_chip)
+	h.add_child(hp)
+	trait_chips = HBoxContainer.new()
+	trait_chips.add_theme_constant_override("separation", 4)
+	h.add_child(trait_chips)
 	chips_box = HBoxContainer.new()
 	chips_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chips_box.add_theme_constant_override("separation", 8)
 	h.add_child(chips_box)
-	btn_sound = _btn("Звук вкл.", "sound", "GhostButton")
+	btn_side = _btn("Сведения", "side", "GhostButton")
+	btn_side.tooltip_text = "Показать или скрыть панель: рука, союзы стихий, описание карты и журнал боя."
+	h.add_child(btn_side)
+	btn_sound = _btn("Звук", "sound", "GhostButton")
+	btn_sound.tooltip_text = "Включить или выключить звук"
 	h.add_child(btn_sound)
 	h.add_child(_btn("Правила", "rules", "GhostButton"))
 	h.add_child(_btn("Меню", "menu", "GhostButton"))
@@ -132,8 +148,12 @@ func _hp_block(me: bool) -> Control:
 	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var name_l := _label("Вы" if me else "Соперник", "MutedLabel", 15)
+	if not me:
+		name_l.clip_text = true
+		name_l.custom_minimum_size.x = 96
+		name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	var bar := ProgressBar.new()
-	bar.custom_minimum_size = Vector2(170, 12)
+	bar.custom_minimum_size = Vector2(120, 12)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.max_value = Data.START_HP
 	bar.value = Data.START_HP
@@ -158,6 +178,7 @@ func _build_side() -> void:
 	side = PanelContainer.new()
 	side.anchor_left = 1; side.anchor_right = 1; side.anchor_top = 0; side.anchor_bottom = 1
 	side.offset_left = -SIDE_W - 10; side.offset_right = -10; side.offset_top = TOP_H + 10; side.offset_bottom = -BOTTOM_H - 20
+	side.visible = false
 	root.add_child(side)
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -256,10 +277,21 @@ func _build_bottom() -> void:
 	shop_grid.columns = 2
 	shop_grid.add_theme_constant_override("h_separation", 8)
 	shop_grid.add_theme_constant_override("v_separation", 8)
-	for spec in [["reroll", "Обновить  2", "BlueButton"], ["xp", "Опыт +4  4", "BlueButton"], ["lock", "Закрепить", ""],
-			["sell", "Продать", ""], ["allin", "Ва-банк", "RedButton"], ["fight", "В бой!", "GoldButton"]]:
+	var tips := {
+		"reroll": "Обновить витрину: 5 новых героев и 2 карты магии. Стоит 2 золота (после поражения первое обновление бесплатно).",
+		"xp": "Купить 4 опыта за 4 золота. Новый уровень — больше героев на поле и выше шанс сильных карт.",
+		"lock": "Сохранить витрину: в следующем раунде магазин не обновится, и эти карты можно будет купить позже.",
+		"sell": "Продать выбранного героя (клик по карте на столе). Можно и просто перетащить карту на монеты.",
+		"allin": "Ва-банк, когда вы отстаёте: победа — соперник теряет вдвое больше ОЗ, поражение — вы в 1,5 раза больше. Раз в 3 раунда.",
+		"fight": "Начать бой. Герои на линии сражаются сами, заклинания из руки магии можно разыграть в бою.",
+	}
+	for spec in [["reroll", "Новые карты", "BlueButton", 2], ["xp", "Опыт +4", "BlueButton", 4], ["lock", "Сохранить витрину", "", 0],
+			["sell", "Продать", "", 0], ["allin", "Ва-банк", "RedButton", 0], ["fight", "В бой!", "GoldButton", 0]]:
 		var b := _btn(spec[1], spec[0], spec[2])
-		b.custom_minimum_size = Vector2(128, 40)
+		b.custom_minimum_size = Vector2(168, 40)
+		b.tooltip_text = tips[spec[0]]
+		if spec[3] > 0:
+			_price(b, spec[3])
 		btns[spec[0]] = b
 		shop_grid.add_child(b)
 	h.add_child(shop_grid)
@@ -270,27 +302,72 @@ func _build_bottom() -> void:
 	speed_grid.add_theme_constant_override("v_separation", 8)
 	for spec in [["speed", "Скорость ×1", 1], ["speed", "Скорость ×2", 2], ["speed", "Скорость ×4", 4], ["skip", "Пропустить", null]]:
 		var b := _btn(spec[1], spec[0], "", spec[2])
-		b.custom_minimum_size = Vector2(128, 40)
+		b.custom_minimum_size = Vector2(168, 40)
 		btns["%s%s" % [spec[0], str(spec[2]) if spec[2] != null else ""]] = b
 		speed_grid.add_child(b)
 	speed_grid.visible = false
 	h.add_child(speed_grid)
 	# витрина
 	shop_box = HBoxContainer.new()
-	shop_box.add_theme_constant_override("separation", 8)
+	shop_box.add_theme_constant_override("separation", 14)
 	shop_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	shop_box.alignment = BoxContainer.ALIGNMENT_BEGIN
+	var heroes := VBoxContainer.new()
+	heroes.add_theme_constant_override("separation", 2)
+	heroes.add_child(_label("ГЕРОИ · клик — купить, цена справа сверху", "HeaderLabel"))
+	var hrow := HBoxContainer.new()
+	hrow.add_theme_constant_override("separation", 8)
 	for i in 5:
 		var tb := _card_button("buy", i, 112)
 		shop_buttons.append(tb)
-		shop_box.add_child(tb)
-	var sep := VSeparator.new()
-	shop_box.add_child(sep)
+		hrow.add_child(tb)
+	heroes.add_child(hrow)
+	shop_box.add_child(heroes)
+	shop_box.add_child(VSeparator.new())
+	var magic := VBoxContainer.new()
+	magic.add_theme_constant_override("separation", 2)
+	magic.add_child(_label("МАГИЯ", "HeaderLabel"))
+	var mrow := HBoxContainer.new()
+	mrow.add_theme_constant_override("separation", 8)
 	for i in 2:
 		var tb := _card_button("buy_magic", i, 112)
 		magic_buttons.append(tb)
-		shop_box.add_child(tb)
+		mrow.add_child(tb)
+	magic.add_child(mrow)
+	shop_box.add_child(magic)
 	h.add_child(shop_box)
+
+## Цена на кнопке: монета и число справа.
+func _price(b: Button, n: int) -> void:
+	var hb := HBoxContainer.new()
+	hb.name = "price"
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.anchor_left = 1; hb.anchor_right = 1; hb.anchor_top = 0.5; hb.anchor_bottom = 0.5
+	hb.offset_left = -46; hb.offset_right = -14; hb.offset_top = -10; hb.offset_bottom = 10
+	hb.add_theme_constant_override("separation", 3)
+	var ic := TextureRect.new()
+	ic.texture = UiTheme.icon("coin")
+	ic.custom_minimum_size = Vector2(16, 16)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := _label(str(n), "TitleLabel", 15)
+	l.name = "n"
+	l.add_theme_color_override("font_color", Color("ffe9a8"))
+	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_color_override("font_outline_color", Color(0.03, 0.04, 0.06, 0.85))
+	hb.add_child(ic); hb.add_child(l)
+	b.add_child(hb)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+func set_price(key: String, text: String) -> void:
+	var b: Button = btns[key]
+	if b.has_node("price/n"):
+		(b.get_node("price/n") as Label).text = text
+
+func toggle_side() -> void:
+	side.visible = not side.visible
+	btn_side.text = "Скрыть" if side.visible else "Сведения"
 
 func _card_button(action: String, i: int, w := 120) -> TextureButton:
 	var tb := TextureButton.new()
@@ -366,7 +443,7 @@ func _build_misc() -> void:
 	step_lbl = _label("", "TitleLabel", 24)
 	step_lbl.anchor_left = 0.5; step_lbl.anchor_right = 0.5
 	step_lbl.offset_top = TOP_H + 70
-	step_lbl.offset_left = -200; step_lbl.offset_right = 200 - SIDE_W
+	step_lbl.offset_left = -200; step_lbl.offset_right = 200
 	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	step_lbl.add_theme_constant_override("outline_size", 10)
 	step_lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.03))
@@ -420,6 +497,31 @@ func set_chips(items: Array) -> void:
 		chips_box.add_child(p)
 
 func set_hand_info(hand_key: String, cards: Array, traits: Dictionary) -> void:
+	var bonus: String = Data.hand_text(hand_key)
+	hand_chip.text = Data.HANDS[hand_key].n + ("" if bonus == "без бонуса" else " · " + bonus)
+	for c in trait_chips.get_children():
+		c.queue_free()
+	for s in ["S", "H", "D", "C"]:
+		var su: Dictionary = Data.SUITS[s]
+		var n_: int = traits.n[s]
+		var lv_: int = traits.lv[s]
+		var chip := PanelContainer.new()
+		chip.theme_type_variation = "ChipPanel"
+		chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		chip.modulate = Color.WHITE if lv_ > 0 else Color(1, 1, 1, 0.5)
+		chip.tooltip_text = "%s: %d из %d разных героев.\n2 героя: %s\n4 героя: %s" % [su.name, n_, 2 if n_ < 2 else 4, Data.trait_text(s, 1), Data.trait_text(s, 2)]
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 3)
+		var em := TextureRect.new()
+		em.texture = UiTheme.icon("element_" + String(su.key))
+		em.custom_minimum_size = Vector2(18, 18)
+		em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var l := _label(str(n_), "TitleLabel", 14)
+		l.add_theme_color_override("font_color", su.color.lightened(0.4))
+		hb.add_child(em); hb.add_child(l)
+		chip.add_child(hb)
+		trait_chips.add_child(chip)
 	hand_name.text = Data.HANDS[hand_key].n
 	hand_bonus.text = Data.hand_text(hand_key)
 	for c in hand_cards.get_children():
@@ -562,7 +664,7 @@ func show_zoom_hero(u: Dictionary, near: Vector2) -> void:
 	var vs := root.get_viewport_rect().size
 	var sz := zoom.custom_minimum_size
 	var pos := near + Vector2(110, -sz.y * 0.6)
-	if pos.x + sz.x > vs.x - SIDE_W - 20:
+	if pos.x + sz.x > vs.x - 20:
 		pos.x = near.x - 110 - sz.x
 	pos.y = clampf(pos.y, TOP_H + 8, vs.y - BOTTOM_H - sz.y - 24)
 	zoom_box.position = pos

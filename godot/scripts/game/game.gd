@@ -274,7 +274,7 @@ func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 
 func _refresh_hud() -> void:
 	var p: Dictionary = m.p
-	var foe_name: String = "Соперник · %s" % Data.DIFFN[m.diff].to_lower() if net_game == null else net_game.opp_name()
+	var foe_name: String = "Соперник" if net_game == null else net_game.opp_name()
 	hud.set_hp(int(p.hp), int(m.ai.hp) if net_game == null else net_game.opp_hp(), foe_name)
 	hud.lbl_round.text = "Раунд %d" % m.round_n
 	var board := Rules.board_units(p)
@@ -290,13 +290,14 @@ func _refresh_hud() -> void:
 	hud.set_hand(p.hand, m.round_n, hand_sel, in_battle)
 	var shop_phase := m.phase == "shop" and not in_battle
 	hud.set_buttons({
-		"reroll": {"on": shop_phase and (m.free_roll > 0 or int(p.gold) >= 2), "text": "Обновить  даром" if m.free_roll > 0 else "Обновить  2"},
+		"reroll": {"on": shop_phase and (m.free_roll > 0 or int(p.gold) >= 2)},
 		"xp": {"on": shop_phase and int(p.gold) >= 4 and int(p.level) < 8},
-		"lock": {"on": shop_phase, "text": "Закреплён" if m.locked else "Закрепить"},
+		"lock": {"on": shop_phase, "text": "Витрина сохранена" if m.locked else "Сохранить витрину"},
 		"sell": {"on": shop_phase and sel_uid >= 0},
 		"allin": {"on": shop_phase and (m.can_allin() or bool(p.allin)), "text": "Ва-банк!" if p.allin else "Ва-банк"},
 		"fight": {"on": shop_phase},
 	})
+	hud.set_price("reroll", "0" if m.free_roll > 0 else "2")
 	var chips := []
 	if p.allin: chips.append("Ва-банк!")
 	var bt := m.bounty_text()
@@ -376,7 +377,9 @@ func _on_act(name: String, arg: Variant) -> void:
 					hud.toast("Уровень %d: на поле до %d карт" % [m.p.level, Rules.cap_of(int(m.p.level))], "good")
 				_refresh_hud()
 		"lock":
-			m.toggle_lock(); _refresh_hud()
+			m.toggle_lock()
+			hud.toast("Витрина сохранена: в следующем раунде магазин не обновится" if m.locked else "Витрина обновится в следующем раунде", "good" if m.locked else "")
+			_refresh_hud()
 		"sell":
 			if sel_uid >= 0:
 				var loc = Rules.loc_of_uid(m.p, sel_uid)
@@ -419,9 +422,11 @@ func _on_act(name: String, arg: Variant) -> void:
 		"sound":
 			sound_on = not sound_on
 			Sfx.enabled = sound_on
-			hud.btn_sound.text = "Звук вкл." if sound_on else "Звук выкл."
+			hud.btn_sound.text = "Звук" if sound_on else "Без звука"
 		"rules":
 			_show_rules()
+		"side":
+			hud.toggle_side()
 		"menu":
 			_show_start()
 		"start":
@@ -1007,7 +1012,7 @@ func _show_start() -> void:
 	v.add_child(_button("Как играть", "rules"))
 	hud.show_overlay(v)
 
-const RULES_TEXT := """Магазин. Каждый раунд приносит 5 золота и проценты с накоплений (1 за каждые 10, до 5). Купите героя кликом по карте внизу. Три одинаковые карты сливаются в ★★, три ★★ — в ★★★.
+const RULES_TEXT := """Магазин. Каждый раунд приносит 5 золота и проценты с накоплений (1 за каждые 10, до 5). Купите героя кликом по карте внизу. Три одинаковые карты сливаются в ★★, три ★★ — в ★★★. «Новые карты» — обновить витрину за 2 золота. «Опыт +4» — поднять уровень (больше героев на поле). «Сохранить витрину» — магазин не обновится в следующем раунде. Наведите на любую кнопку — появится подсказка.
 
 Поле — это ваша рука. До 5 героев на линиях. Пара, две пары, тройка, стрит, флеш, фулл-хаус, каре (только с Джокером) и стрит-флеш усиливают весь отряд. Комбинацию собирают только разные герои: копии одного считаются одной картой.
 
