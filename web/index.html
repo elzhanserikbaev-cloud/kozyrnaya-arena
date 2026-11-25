@@ -292,6 +292,18 @@ body{font-size:15px;-webkit-touch-callout:none}
 .credits{font-size:12.5px}
 .sold{font-size:12.5px;letter-spacing:0;text-transform:none}
 
+/* === Ва-банк, награда, жертвоприношение === */
+.fightbtn.half{grid-column:auto}
+.btn.allin{justify-content:center;border-color:#6e2a32;color:#eab0b7}
+.btn.allin.on{background:#5e0f19;border-color:#c8303f;color:#fff}
+.btn.allin.off{opacity:.55}
+.chip.bounty{border-color:#8a3a44;color:#f0b9c0}
+.chip.allin{border-color:#c8303f;background:#5e0f19;color:#fff}
+.ovcard .note{margin:0;color:var(--brass)}
+body.feeding #shopbar,body.feeding #hand,body.feeding #top{opacity:.28;pointer-events:none;transition:opacity .25s}
+body.feeding #side{opacity:.45}
+body.feeding #ov3d{opacity:.2}
+
 /* === Телефоны и маленькие окна === */
 #rotate{display:none}
 #infobar{display:none}
@@ -494,15 +506,21 @@ const XPNEED=[0,2,4,8,14,22,34,50,0];
 const ODDS=[null,[100,0,0,0,0],[75,25,0,0,0],[55,35,10,0,0],[40,35,20,5,0],[25,35,30,10,0],[18,27,35,17,3],[12,20,33,27,8],[5,15,30,35,15]];
 const AIBONUS={easy:-1,normal:0,hard:2};
 const DIFFN={easy:'Лёгкий',normal:'Обычный',hard:'Тяжёлый'};
-const START_HP=60;
-const SAVE_KEY='kozyr-arena-save-v4';
+const START_HP=100;
+const FEED_PCT=.15,FEED_MAX=2,DMG_CAP=18;
+// урон за проигранный раунд: ×1,5 к старому (под 100 ОЗ), не больше DMG_CAP — защита от разгрома
+const roundDamage=(base,surv)=>Math.min(DMG_CAP,Math.round((base+surv)*1.5));
+// золото за серию: поражения дают больше, чем победы (помогает отстающему)
+const streakGold=st=>st<0?(st<=-4?3:st<=-3?2:st<=-2?1:0):(st>=4?2:st>=2?1:0);
+const SAVE_KEY='kozyr-arena-save-v5';
 
 const rl=r=>({11:'J',12:'Q',13:'K',14:'A'})[r]||String(r);
 const $=s=>document.querySelector(s);
 const capOf=l=>Math.min(5,l+1);
-const stats=u=>{const d=DEF[u.id];return {hp:R(d.hp*STARM[u.star]),atk:R(d.atk*STARM[u.star])}};
+const stats=u=>{const d=DEF[u.id],fd=u.fed;return {hp:R(d.hp*STARM[u.star])+(fd?fd.hp:0),atk:R(d.atk*STARM[u.star])+(fd?fd.atk:0)}};
+const fedKey=u=>u&&u.fed&&u.fed.n?`f${u.fed.n}_${u.fed.atk}_${u.fed.hp}`:'';
 const sellValue=u=>DEF[u.id].c*Math.pow(3,u.star-1);
-const power=u=>{const d=DEF[u.id];return (d.hp/8+d.atk*2+d.c*45)*STARM[u.star]};
+const power=u=>{const d=DEF[u.id],fd=u.fed;return (d.hp/8+d.atk*2+d.c*45)*STARM[u.star]+(fd?fd.hp/8+fd.atk*2:0)};
 
 let S=null, uidc=1;
 const mkUnit=(id,star=1)=>({uid:uidc++,id,star});
@@ -595,6 +613,8 @@ function mergeAll(side){
           const [keep,a,b]=g[id];
           const its=[...(keep.u.items||[]),...(a.u.items||[]),...(b.u.items||[])];
           keep.u.items=its.slice(0,2);
+          const fds=[keep.u.fed,a.u.fed,b.u.fed].filter(Boolean);
+          if(fds.length) keep.u.fed={atk:fds.reduce((t,x)=>t+x.atk,0),hp:fds.reduce((t,x)=>t+x.hp,0),n:Math.min(FEED_MAX,fds.reduce((t,x)=>t+x.n,0))};
           its.slice(2).forEach(k=>{if(side.hand&&side.hand.length<5)side.hand.push(k);else side.gold+=MAGIC[k].c;});
           keep.u.star++; side[a.z][a.i]=null; side[b.z][b.i]=null;
           merged=keep.u; changed=true; break;
@@ -638,6 +658,13 @@ function aiArrange(side){
   const tanky=best.slice().sort((a,b)=>stats(b).hp-stats(a).hp);
   [2,1,3,0,4].slice(0,tanky.length).forEach((lane,i)=>side.board[lane]=tanky[i]);
   rest.forEach((u,i)=>{if(i<6) side.bench[i]=u; else side.gold+=sellValue(u);});
+  for(let i=0;i<6;i++){
+    const food=side.bench[i]; if(!food||food.star<2) continue;
+    const tgt=side.board.filter(u=>u&&DEF[u.id].s===DEF[food.id].s&&(u.fed?u.fed.n:0)<FEED_MAX&&power(u)>power(food)*1.2).sort((a,b)=>power(b)-power(a))[0];
+    if(!tgt) continue;
+    const b=stats({id:food.id,star:food.star}),fd=tgt.fed||(tgt.fed={atk:0,hp:0,n:0});
+    fd.atk+=R(b.atk*FEED_PCT);fd.hp+=R(b.hp*FEED_PCT);fd.n++;side.bench[i]=null;
+  }
 }
 function aiTurn(side){
   const target=[0,1,2,3,3,4,4,5,5,5,6,6,6,7,7,7,8][Math.min(S.round,16)];
@@ -847,7 +874,7 @@ function cardBody(x,star,tier){
   rr(x,22,22,TW-44,TH-44,20);x.strokeStyle='rgba(201,162,74,.55)';x.lineWidth=2;x.stroke();
   rr(x,28,28,TW-56,TH-56,16);x.strokeStyle=tier;x.globalAlpha=.6;x.lineWidth=2;x.stroke();x.globalAlpha=1;
 }
-function drawFace(x,id,star,items=[]){
+function drawFace(x,id,star,items=[],fed=null){
   const d=DEF[id],su=SUITS[d.s],tier=TIERC[d.c],sc=su.red?'#d33445':'#d9cdb4';
   cardBody(x,star,tier);
   // портрет
@@ -891,7 +918,13 @@ function drawFace(x,id,star,items=[]){
   fitFont(x,d.ab.n,TW-70,32,22,fs=>`italic ${fs}px ${SERIF}`);
   x.fillStyle='#d6c9b0';x.fillText(d.ab.n,TW/2,ny+112);
   // статы
-  const s2=stats({id,star});
+  const s2=stats({id,star,fed});
+  if(fed&&fed.n){
+    for(let i=0;i<FEED_MAX;i++){
+      x.beginPath();x.arc(66+i*34,py+30,12,0,Math.PI*2);
+      x.fillStyle=i<fed.n?'#b3202f':'rgba(10,8,9,.85)';x.fill();x.lineWidth=3;x.strokeStyle='#c9a24a';x.stroke();
+    }
+  }
   const badge=(cx,col,lab,val)=>{
     x.beginPath();x.arc(cx,TH-84,58,0,Math.PI*2);x.fillStyle=col;x.fill();x.lineWidth=5;x.strokeStyle='#c9a24a';x.stroke();
     x.fillStyle='rgba(240,225,195,.85)';x.font='bold 20px '+SERIF;x.fillText(lab,cx,TH-114);
@@ -935,16 +968,16 @@ function flatMat(name,tex){
   return m;
 }
 const faceMats=new Map();
-function faceMat(id,star,items=[]){
-  const k=id+star+items.join(''); if(faceMats.has(k)) return faceMats.get(k);
-  const t=dyn('ft'+k,TW,TH);drawFace(t.getContext(),id,star,items);t.update();t.hasAlpha=true;t.anisotropicFilteringLevel=8;
+function faceMat(id,star,items=[],fed=null){
+  const k=id+star+items.join('')+fedKey({fed}); if(faceMats.has(k)) return faceMats.get(k);
+  const t=dyn('ft'+k,TW,TH);drawFace(t.getContext(),id,star,items,fed);t.update();t.hasAlpha=true;t.anisotropicFilteringLevel=8;
   const m=flatMat('fm'+k,t);faceMats.set(k,m);return m;
 }
 const backMat=(()=>{const t=dyn('back',TW,TH);drawBack(t.getContext());t.update();t.hasAlpha=true;t.anisotropicFilteringLevel=8;return flatMat('bm',t);})();
 const thumbs=new Map();
-function thumb(id,star=1,items=[]){
-  const k=id+star+items.join(''); if(thumbs.has(k)) return thumbs.get(k);
-  const c=document.createElement('canvas');c.width=TW;c.height=TH;drawFace(c.getContext('2d'),id,star,items);
+function thumb(id,star=1,items=[],fed=null){
+  const k=id+star+items.join('')+fedKey({fed}); if(thumbs.has(k)) return thumbs.get(k);
+  const c=document.createElement('canvas');c.width=TW;c.height=TH;drawFace(c.getContext('2d'),id,star,items,fed);
   const url=c.toDataURL('image/png');thumbs.set(k,url);return url;
 }
 function magicThumb(k){
@@ -1019,6 +1052,7 @@ for(let i=0;i<5;i++){makeSlot('board',i,POS.board(i),String(i+1),'rgba(228,174,8
 for(let i=0;i<6;i++) makeSlot('bench',i,POS.bench(i),'','rgba(170,150,130,A)',.86);
 const sellSlot=makeSlot('sell',0,POS.sell(),'₸','rgba(242,106,125,A)',.86,'ПРОДАТЬ');
 function updateSlotHighlights(){
+  if(S&&S.feed){for(const m of slotMeshes)m.material.alpha=.06;return;}
   const active=!!(dragging||(S&&S.sel));
   for(const m of slotMeshes){
     const z=m.metadata.slot.z;
@@ -1045,7 +1079,7 @@ function makeNode(u,register=true){
   for(const m of [face,back,edge]) m.metadata={uid:u.uid};
   sg.addShadowCaster(edge);
   const n={uid:u.uid,id:u.id,star:0,root,pivot,an,face,back,edge,halo,tok:0,flashUntil:0};
-  n.star=u.star;n.key=u.star+'|'+(u.items||[]).join(',');face.material=faceMat(u.id,u.star,u.items||[]);
+  n.star=u.star;n.key=u.star+'|'+(u.items||[]).join(',')+'|'+fedKey(u);face.material=faceMat(u.id,u.star,u.items||[],u.fed||null);
   if(register) nodes.set(u.uid,n);
   return n;
 }
@@ -1159,10 +1193,10 @@ function sync3D(o={}){
       const sp=o.spawnUid===uid&&o.spawn?o.spawn:new V3(w.pos.x,2.6,w.foe?7.5:-7.5);
       n.root.position.copyFrom(sp);n.root.scaling.setAll(w.s);
     }
-    const key=w.u.star+'|'+(w.u.items||[]).join(',');
+    const key=w.u.star+'|'+(w.u.items||[]).join(',')+'|'+fedKey(w.u);
     if(n.key!==key){
       const up=n.star!==w.u.star;
-      n.star=w.u.star;n.key=key;n.face.material=faceMat(n.id,n.star,w.u.items||[]);
+      n.star=w.u.star;n.key=key;n.face.material=faceMat(n.id,n.star,w.u.items||[],w.u.fed||null);
       if(up) setTimeout(()=>{burst(w.pos.add(new V3(0,.4,0)),'#ffd36b',90,2.6,{g:-2,life:.9});flashHalo(n,'#ffd36b',900);},360);
     }
     if(S.phase!=='result') resetAnim(n);
@@ -1173,7 +1207,7 @@ function sync3D(o={}){
 }
 
 /* ---------- кадр ---------- */
-let hoverUid=null,dragging=null,press=null,showcase=[];
+let hoverUid=null,dragging=null,press=null,rpress=null,lpTimer=0,showcase=[];
 const tmpV=new V3();
 scene.onBeforeRenderObservable.add(()=>{
   const now=performance.now();
@@ -1189,15 +1223,26 @@ scene.onBeforeRenderObservable.add(()=>{
     const shop=S&&S.phase==='shop';
     if(shop&&n.uid===hoverUid&&!dragging){ty=.16;rx=-.12;}
     if(shop&&n.uid===selUid){ty=.45;rx=-.32;}
+    if(shop&&S.feed){if(n.uid===S.feed.uid){ty=.45;rx=-.32;}else if(S.feed.food.includes(n.uid)){ty=.22;rx=-.15;}}
     if(dragging&&dragging.uid===n.uid){ty=.1;rx=-.42;}
     n.pivot.position.y+=(ty-n.pivot.position.y)*Math.min(1,dt*12);
     n.pivot.rotation.x+=(rx-n.pivot.rotation.x)*Math.min(1,dt*12);
     if(now>n.flashUntil){
-      const on=n.uid===selUid||(dragging&&dragging.uid===n.uid);
-      if(on){if(n.halo.material!==haloMat('#e4ae50'))n.halo.material=haloMat('#e4ae50');n.halo.isVisible=true;}
+      let col=null;
+      if(S&&S.feed){if(n.uid===S.feed.uid)col='#c8303f';else if(S.feed.food.includes(n.uid))col='#e4ae50';}
+      else if(n.uid===selUid||(dragging&&dragging.uid===n.uid))col='#e4ae50';
+      if(col){const hm=haloMat(col);if(n.halo.material!==hm)n.halo.material=hm;n.halo.isVisible=true;}
       else n.halo.isVisible=false;
     }
+    if(S&&S.phase==='shop'){
+      const vis=S.feed&&n.uid!==S.feed.uid&&!S.feed.food.includes(n.uid)?.12:1;
+      if(n.face.visibility!==vis){n.face.visibility=vis;n.back.visibility=vis;n.edge.visibility=vis;}
+    }
   }
+  // свет приглушается на время жертвоприношения
+  const dim=!!(S&&S.feed);
+  spot.intensity+=((dim?.3:1.35)-spot.intensity)*Math.min(1,dt*8);
+  hemi.intensity+=((dim?.1:.42)-hemi.intensity)*Math.min(1,dt*8);
   if(showcase.length){
     const t=now/1000;
     showcase.forEach((n,i)=>{n.root.position.y=1.6+Math.sin(t*1.2+i)*.18;n.an.rotation.y=Math.sin(t*.7+i*.8)*.35;});
@@ -1277,10 +1322,17 @@ scene.onPointerObservable.add(pi=>{
   const e=pi.event,T=BABYLON.PointerEventTypes;
   if(!S||S.showStart) return;
   if(pi.type===T.POINTERDOWN){
+    if(e.button===2){rpress={x:e.clientX,y:e.clientY,meta:pickMeta()};return;}
     if(e.button!==0) return;
     press={x:e.clientX,y:e.clientY,meta:pickMeta()};
+    clearTimeout(lpTimer);
+    if(e.pointerType==='touch'&&press.meta&&press.meta.uid&&S.phase==='shop'&&!S.feed){
+      const p0=press;
+      lpTimer=setTimeout(()=>{if(press===p0&&!dragging&&locOfUid(p0.meta.uid)){press=null;startFeed(p0.meta.uid);}},550);
+    }
   } else if(pi.type===T.POINTERMOVE){
-    if(press&&press.meta&&press.meta.uid&&!dragging&&S.phase==='shop'&&S.useMagic==null){
+    if(press&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>8) clearTimeout(lpTimer);
+    if(press&&press.meta&&press.meta.uid&&!dragging&&S.phase==='shop'&&S.useMagic==null&&!S.feed){
       const loc=locOfUid(press.meta.uid);
       if(loc&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>7){dragging={uid:press.meta.uid,from:loc};S.sel=null;sfx('pick');updateSlotHighlights();renderShopbar();}
     }
@@ -1291,11 +1343,20 @@ scene.onPointerObservable.add(pi=>{
       const m=pickMeta(),uid=m&&m.uid?m.uid:null;
       if(uid!==hoverUid){
         hoverUid=uid;
-        if(uid){const u=unitByUid(uid);if(u){S.info={id:u.id,star:u.star,items:u.items||[]};renderInfo();}}
+        if(uid){const u=unitByUid(uid);if(u){S.info={id:u.id,star:u.star,items:u.items||[],fed:u.fed||null};renderInfo();}}
       }
       canvas.style.cursor=S.targeting!=null||S.useMagic!=null?(uid?'crosshair':'default'):uid&&locOfUid(uid)&&S.phase==='shop'?'grab':(m&&m.slot&&S.sel?'pointer':'default');
     }
   } else if(pi.type===T.POINTERUP){
+    clearTimeout(lpTimer);
+    if(e.button===2){
+      const r=rpress;rpress=null;
+      if(r&&Math.hypot(e.clientX-r.x,e.clientY-r.y)<6&&S.phase==='shop'){
+        if(S.feed) endFeed();
+        else if(r.meta&&r.meta.uid&&locOfUid(r.meta.uid)) startFeed(r.meta.uid);
+      }
+      return;
+    }
     if(e.button!==0){press=null;return;}
     if(dragging){
       const d=dragging,tgt=nearestSlot(groundPoint(0));dragging=null;press=null;canvas.style.cursor='default';
@@ -1317,6 +1378,11 @@ function onPick(m){
     return;
   }
   if(S.phase!=='shop') return;
+  if(S.feed){
+    if(m&&m.uid&&S.feed.food.includes(m.uid)) doFeed(m.uid);
+    else if(!(m&&m.uid===S.feed.uid)) endFeed();
+    return;
+  }
   if(S.useMagic!=null){
     let loc=null;
     if(m&&m.uid) loc=locOfUid(m.uid);
@@ -1346,7 +1412,7 @@ function beginRound(first){
   for(const [side,isAi] of (S.mode==='net'?[[S.p,false]]:[[S.p,false],[S.ai,true]])){
     if(first){side.gold=6;continue;}
     const interest=Math.min(5,Math.floor(side.gold/10));
-    const st=Math.abs(side.streak),sb=st>=3?2:st>=2?1:0;
+    const sb=streakGold(side.streak);
     const lv=side.level;
     side.gold+=Math.max(0,5+interest+sb+(isAi?AIBONUS[S.diff]:0));
     addXp(side,2);
@@ -1354,6 +1420,7 @@ function beginRound(first){
   }
   if(first||!S.locked){S.shop=rollShop(S.p.level);S.magicShop=[rollMagic(),rollMagic()];}
   S.locked=false;S.phase='shop';S.sel=null;S.teams=null;S.result=null;S.step=0;
+  S.allin=false;if(S.ai)S.ai.allin=false;S.feed=null;document.body.classList.remove('feeding');
   clearBars();
   render();
   if(!first&&S.income){const {interest,sb}=S.income;toast(`+${5+interest+sb} золота: 5 за раунд${interest?`, ${interest} процентов`:''}${sb?`, ${sb} за серию`:''}`);}
@@ -1412,9 +1479,69 @@ function applyItem(loc){
   if(!u||!k) return;
   u.items=u.items||[];
   if(u.items.length>=2){toast('У героя уже 2 усиления','bad');return;}
-  u.items.push(k);S.p.hand.splice(i,1);S.useMagic=null;S.info={id:u.id,star:u.star,items:u.items};
+  u.items.push(k);S.p.hand.splice(i,1);S.useMagic=null;S.info={id:u.id,star:u.star,items:u.items,fed:u.fed||null};
   const n=nodes.get(u.uid);if(n){burst(n.root.position.add(new V3(0,.4,0)),'#46c9bd',70,2.2,{g:-2});flashHalo(n,'#46c9bd',800);}
   sfx('merge');toast(`${DEF[u.id].n} получает «${MAGIC[k].n}»`,'good');render();
+}
+/* ---------- Жертвоприношение ---------- */
+function feedTargetsFor(recv){
+  const su=DEF[recv.id].s;
+  return allUnits(S.p).filter(u=>u.uid!==recv.uid&&u.star>=2&&DEF[u.id].s===su);
+}
+function startFeed(uid){
+  if(!S||S.phase!=='shop') return;
+  const u=unitByUid(uid); if(!u||!locOfUid(uid)) return;
+  const n=u.fed?u.fed.n:0;
+  if(n>=FEED_MAX){toast(`${DEF[u.id].n} сыт: уже съел ${FEED_MAX} карты`,'bad');return;}
+  const food=feedTargetsFor(u);
+  if(!food.length){toast(`Нечем накормить «${DEF[u.id].n}»: нужна другая карта ★★ или ★★★ масти ${SUITS[DEF[u.id].s].sym}`,'bad');return;}
+  S.feed={uid,food:food.map(x=>x.uid)};S.sel=null;S.useMagic=null;sfx('pick');
+  S.info={id:u.id,star:u.star,items:u.items||[],fed:u.fed||null};
+  document.body.classList.add('feeding');
+  render();
+}
+function endFeed(){
+  if(!S||!S.feed) return;
+  S.feed=null;document.body.classList.remove('feeding');render();
+}
+function doFeed(foodUid){
+  const recv=unitByUid(S.feed.uid),food=unitByUid(foodUid),loc=locOfUid(foodUid);
+  if(!recv||!food||!loc){endFeed();return;}
+  const b=stats({id:food.id,star:food.star}),add={atk:R(b.atk*FEED_PCT),hp:R(b.hp*FEED_PCT)};
+  const fd=recv.fed||(recv.fed={atk:0,hp:0,n:0});
+  fd.atk+=add.atk;fd.hp+=add.hp;fd.n++;
+  S.p[loc.z][loc.i]=null;
+  (food.items||[]).forEach(k=>{if(S.p.hand.length<5)S.p.hand.push(k);else S.p.gold+=MAGIC[k].c;});
+  const fn=nodes.get(foodUid),rn=nodes.get(recv.uid);
+  if(fn&&rn){
+    nodes.delete(foodUid);fn.tok++;
+    const from=fn.root.position.clone(),to=rn.root.position.clone();
+    tween(480,k=>{V3.LerpToRef(from,to,k,fn.root.position);fn.root.position.y+=Math.sin(k*Math.PI)*.9;fn.root.scaling.setAll(Math.max(.05,1-k*.9));},easeInOut)
+      .then(()=>{disposeNode(fn);burst(to.add(new V3(0,.4,0)),'#b3202f',70,2.2,{g:-2});flashHalo(rn,'#b3202f',900);});
+  }
+  sfx('merge');
+  toast(`${DEF[recv.id].n} съел «${DEF[food.id].n}»: +${add.atk} АТК, +${add.hp} ОЗ (съедено ${fd.n} из ${FEED_MAX})`,'good');
+  S.info={id:recv.id,star:recv.star,items:recv.items||[],fed:recv.fed};
+  S.feed=null;document.body.classList.remove('feeding');render();
+}
+/* ---------- Ва-банк ---------- */
+function topRivalHp(){
+  if(S.mode==='net'){const o=NET.players.filter(p=>p.alive&&p.id!==NET.id).map(p=>p.hp);return o.length?Math.max(...o):0;}
+  return S.ai.hp;
+}
+function canAllin(){return S.phase==='shop'&&(S.allinCd||0)<=S.round&&S.p.hp<topRivalHp();}
+function allinReason(){
+  if((S.allinCd||0)>S.round) return `Ва-банк снова будет доступен с раунда ${S.allinCd}.`;
+  return 'Ва-банк доступен, только когда у вас меньше ОЗ, чем у лидера.';
+}
+function bountyText(){
+  if(S.mode==='net'){
+    const b=NET.players.filter(p=>p.alive&&p.id!==NET.id&&(p.streak|0)>=3);
+    return b.length?'Награда за голову: '+b.map(p=>esc(p.name)+' '+p.streak).join(', '):'';
+  }
+  if(S.ai.streak>=3) return `Награда за голову соперника: ${S.ai.streak} золота`;
+  if(S.p.streak>=3) return `За вашу голову награда: ${S.p.streak}`;
+  return '';
 }
 function moveUnit(from,to){
   const p=S.p,a=getAt(p,from),b=getAt(p,to);
@@ -1436,15 +1563,18 @@ function onSlot(loc){
   if(S.phase!=='shop') return;
   const u=getAt(S.p,loc);
   if(S.sel){if(locEq(S.sel,loc)) S.sel=null; else return moveUnit(S.sel,loc);}
-  else if(u){S.sel=loc;S.info={id:u.id,star:u.star,items:u.items||[]};sfx('pick');}
+  else if(u){S.sel=loc;S.info={id:u.id,star:u.star,items:u.items||[],fed:u.fed||null};sfx('pick');}
   render();
   if(S.sel) renderInfo();
 }
 async function fight(){
   if(S.phase!=='shop') return;
+  if(S.feed) endFeed();
   if(S.mode==='net'){netReady();return;}
   S.phase='battle';S.sel=null;S.log=[];
   aiTurn(S.ai);
+  // ИИ идёт ва-банк, когда сильно отстаёт
+  if((S.ai.allinCd||0)<=S.round&&S.ai.hp+15<S.p.hp&&Math.random()<.6){S.ai.allin=true;S.ai.allinCd=S.round+3;}
   sfx('start');
   const res=await simulate();
   resolve(res);
@@ -1452,24 +1582,39 @@ async function fight(){
 function resolve(res){
   const base=1+Math.floor(S.round/3);
   const surv=t=>t.filter(c=>c&&c.alive).reduce((s,c)=>s+c.u.star+(c.d.c>=4?1:0),0);
-  let outcome='draw',dmgP=0,dmgE=0;
-  if(res.pa&&!res.ea){outcome='win';dmgE=base+surv(res.A);}
-  else if(!res.pa&&res.ea){outcome='lose';dmgP=base+surv(res.B);}
-  else{dmgP=base;dmgE=base;}
+  const net=S.mode==='net';
+  const myAllin=!!S.allin,oppAllin=net?!!(S.opp&&S.opp.allin&&!S.opp.ghost):!!S.ai.allin;
+  const oppStreak=net?((S.opp&&!S.opp.ghost&&S.opp.streak)|0):S.ai.streak,myStreak=S.p.streak;
+  const oppName=net&&S.opp?S.opp.name:'Соперник';
+  let outcome='draw',dmgP=0,dmgE=0;const notes=[];
+  if(res.pa&&!res.ea){outcome='win';dmgE=roundDamage(base,surv(res.A));if(myAllin)dmgE*=2;if(oppAllin)dmgE=Math.round(dmgE*1.5);}
+  else if(!res.pa&&res.ea){outcome='lose';dmgP=roundDamage(base,surv(res.B));if(oppAllin)dmgP*=2;if(myAllin)dmgP=Math.round(dmgP*1.5);}
+  else{dmgP=dmgE=roundDamage(base,0);}
+  if(myAllin) notes.push(outcome==='win'?'Ва-банк сыграл: соперник теряет вдвое больше.':outcome==='lose'?'Ва-банк не сыграл: вы теряете в 1,5 раза больше.':'Ва-банк: ничья, без последствий.');
+  if(oppAllin) notes.push(`${oppName} шёл ва-банк: ${outcome==='win'?'он теряет в 1,5 раза больше':outcome==='lose'?'вы теряете вдвое больше':'ничья'}.`);
+  if(myAllin) S.allinCd=S.round+3;
+  // награда за голову: кто прервал серию из 3+ побед, получает золото и карту магии
+  if(outcome==='win'&&oppStreak>=3){
+    S.p.gold+=oppStreak;let card='';
+    if(S.p.hand.length<5){const k=rollMagic();S.p.hand.push(k);card=` и карту «${MAGIC[k].n}»`;}
+    notes.push(`Награда за голову: +${oppStreak} золота${card}.`);
+  }
+  if(!net&&outcome==='lose'&&myStreak>=3) S.ai.gold+=myStreak;
   S.p.hp=Math.max(0,S.p.hp-dmgP);S.ai.hp=Math.max(0,S.ai.hp-dmgE);
   if(outcome==='win'){S.p.streak=S.p.streak>0?S.p.streak+1:1;S.ai.streak=S.ai.streak<0?S.ai.streak-1:-1;}
   else if(outcome==='lose'){S.ai.streak=S.ai.streak>0?S.ai.streak+1:1;S.p.streak=S.p.streak<0?S.p.streak-1:-1;}
   else{S.p.streak=0;S.ai.streak=0;}
   let over=null;
   if(S.mode!=='net'&&(S.p.hp<=0||S.ai.hp<=0)) over=S.p.hp>S.ai.hp?'win':S.p.hp<S.ai.hp?'lose':'draw';
-  S.result={outcome,dmgP,dmgE,over,out:S.mode==='net'&&S.p.hp<=0};S.phase='result';S.targeting=null;
+  S.result={outcome,dmgP,dmgE,over,out:S.mode==='net'&&S.p.hp<=0,notes};S.phase='result';S.targeting=null;
+  notes.forEach(t=>log(t,'sys'));
   if(S.mode==='net'){
     S.rng=null;
     const bot=S.opp&&S.opp.bot;
     sendHost({t:'result',hp:S.p.hp,won:outcome==='win',botId:bot?S.opp.id:null,botDmg:bot?dmgE:0});
   }
   if(S.speed>=50) S.speed=2;
-  log(outcome==='win'?`Раунд ваш. Соперник теряет ${dmgE} ОЗ.`:outcome==='lose'?`Раунд проигран. Вы теряете ${dmgP} ОЗ.`:`Ничья. Обе стороны теряют ${base} ОЗ.`,'sys');
+  log(outcome==='win'?`Раунд ваш. Соперник теряет ${dmgE} ОЗ.`:outcome==='lose'?`Раунд проигран. Вы теряете ${dmgP} ОЗ.`:`Ничья. Обе стороны теряют ${dmgP} ОЗ.`,'sys');
   sfx((over||outcome)==='lose'?'lose':(over||outcome)==='win'?'win':'death');
   if(over){try{localStorage.removeItem(SAVE_KEY);}catch(_){}}
   render();
@@ -1510,6 +1655,9 @@ async function simulate(){
   makeBars();
   [...live(A),...live(B)].forEach(c=>{if(c.shield>0){const n=nodes.get(c.u.uid);flashHalo(n,'#e9eef7',600);}});
   log(`Раунд ${S.round}: ${HANDS[teamInfo(S.p.board.filter(Boolean)).hand].n} против ${HANDS[teamInfo(S.ai.board.filter(Boolean)).hand].n}`,'sys');
+  {const oppAll=S.mode==='net'?!!(S.opp&&S.opp.allin&&!S.opp.ghost):!!S.ai.allin;
+   if(S.allin){banner('Вы идёте ва-банк!','#c8303f');log('Вы идёте ва-банк!','sys');await sleep(1000);}
+   if(oppAll){banner(`${S.mode==='net'&&S.opp?S.opp.name:'Соперник'}: ва-банк!`,'#c8303f');log('Соперник идёт ва-банк!','sys');await sleep(1000);}}
   await sleep(500);
   const net=S.mode==='net';
   if(net) await netSync(0);
@@ -1702,6 +1850,7 @@ function renderTop(){
     <div class="hpbox"><span class="who">Вы</span><div class="bar"><i style="width:${hpw(S.p)}%"></i></div><b>${S.p.hp}</b></div>
     <div class="hpbox foe"><span class="who">${S.mode==='net'&&S.opp?esc(S.opp.name):'Соперник'}</span><div class="bar"><i style="width:${hpw(S.ai)}%"></i></div><b>${S.ai.hp}</b></div>
     <div class="topbtns">
+      ${S.allin?'<span class="chip allin">Ва-банк!</span>':''}${bountyText()?`<span class="chip bounty">${bountyText()}</span>`:''}
       <span class="chip">${S.mode==='net'?`Сеть · в игре ${NET.players.filter(p=>p.alive).length}`:DIFFN[S.diff]}${st}</span>
       <button class="ibtn" data-act="mute" aria-pressed="${AUD.muted}">${AUD.muted?'Звук выкл.':'Звук вкл.'}</button>
       <button class="ibtn" data-act="rules">Правила</button>
@@ -1717,7 +1866,8 @@ function renderStage(){
   } else if(el) el.remove();
   let h=$('#hint'),msg=null,warn=false;
   if(S.phase==='shop'&&!S.showStart){
-    if(S.useMagic!=null&&S.p.hand[S.useMagic]){msg=`Нажмите на героя, чтобы выдать «${MAGIC[S.p.hand[S.useMagic]].n}» · Esc — отмена`;warn=true;}
+    if(S.feed){const r=unitByUid(S.feed.uid);if(r){const n=r.fed?r.fed.n:0;msg=`Жертвоприношение для «${DEF[r.id].n}»: нажмите на подсвеченную карту ★★ масти ${SUITS[DEF[r.id].s].sym}. Она исчезнет, а герой получит 15% её АТК и ОЗ (съедено ${n} из ${FEED_MAX}). ${IS_TOUCH?'Нажмите мимо карт':'ПКМ или Esc'} — отмена.`;warn=true;}}
+    else if(S.useMagic!=null&&S.p.hand[S.useMagic]){msg=`Нажмите на героя, чтобы выдать «${MAGIC[S.p.hand[S.useMagic]].n}» · Esc — отмена`;warn=true;}
     else msg=S.sel?'Нажмите на место на столе, куда поставить героя, или на «Продать»':stepHint();
   } else if(S.phase==='battle'&&S.targeting!=null&&S.p.hand[S.targeting]){
     const M=MAGIC[S.p.hand[S.targeting]];msg=`«${M.n}»: нажмите на ${M.t==='foe'?'карту соперника':'свою карту'} · Esc — отмена`;warn=true;
@@ -1747,6 +1897,10 @@ function stepHint(){
     return S.mode==='net'?'Шаг 3. Нажмите «Готов» внизу слева. Бой пройдёт сам.':'Шаг 3. Нажмите «В бой!» внизу слева. Бой пройдёт сам.';
   }
   if(onBoard<cap&&onBench>0) return `На поле есть свободные места: ${onBoard} из ${cap}. Поставьте героев со скамьи.`;
+  if(canAllin()) return 'Вы отстаёте: доступен «Ва-банк» (кнопка рядом с «В бой!»). Победа — соперник теряет вдвое больше, поражение — вы в 1,5 раза больше.';
+  if(allUnits(p).some(u=>(u.fed?u.fed.n:0)<FEED_MAX&&feedTargetsFor(u).length))
+    return IS_TOUCH?'Можно принести жертву: долгое нажатие на героя, затем карта ★★ той же масти — герой получит 15% её силы.'
+      :'Можно принести жертву: правый клик по герою, затем карта ★★ той же масти — герой получит 15% её силы.';
   if(IS_TOUCH&&innerHeight<560) return '';
   return IS_TOUCH?'Совет: три одинаковых героя сливаются в ★★. Разные герои одного ранга дают покерную руку.'
     :'Совет: три одинаковых героя сливаются в ★★. Правая кнопка мыши вращает стол, колесо приближает.';
@@ -1772,7 +1926,8 @@ function renderShopbar(){
       <button class="btn" data-act="xp" ${p.gold<4||p.level>=8?'disabled':''}>Опыт +4<span class="pr">4</span></button>
       <button class="btn ${S.locked?'on':''}" data-act="lock" aria-pressed="${S.locked}">${S.locked?'Закреплён':'Закрепить'}</button>
       <button class="btn" data-act="sellbtn" ${selU?'':'disabled'}>Продать${selU?`<span class="pr">+${sellValue(selU)}</span>`:''}</button>
-      <button class="btn fightbtn" id="fightbtn" data-act="fight">${S.mode==='net'?'Готов':'В бой!'}</button>`
+      <button class="btn allin ${S.allin?'on':''} ${canAllin()||S.allin?'':'off'}" data-act="allin" title="Победа: соперник теряет ×2 ОЗ. Поражение: вы теряете ×1,5. Раз в 3 раунда, когда вы отстаёте.">${S.allin?'Ва-банк!':'Ва-банк'}</button>
+      <button class="btn fightbtn half" id="fightbtn" data-act="fight">${S.mode==='net'?'Готов':'В бой!'}</button>`
     :S.phase==='battle'?`
       <button class="btn ${S.speed===1?'on':''}" data-act="speed" data-v="1">Скорость ×1</button>
       <button class="btn ${S.speed===2?'on':''}" data-act="speed" data-v="2">Скорость ×2</button>
@@ -1801,11 +1956,12 @@ function infoHTML(){
       <div><b>${M.n}</b><div class="muted small">${M.k==='item'?'Усиление: выдаётся герою между боями, до 2 на героя':'Заклинание: разыгрывается во время боя, до 2 за бой'} · стоимость ${M.c}</div></div></div>
       <p>${magicDesc(x.magic)}</p>`;
   }
-  const d=DEF[x.id],su=SUITS[d.s],st=stats(x);
-  return `<div class="info-head"><img src="${thumb(x.id,x.star)}" alt="">
+  const d=DEF[x.id],su=SUITS[d.s],st=stats(x),fn=x.fed?x.fed.n:0;
+  return `<div class="info-head"><img src="${thumb(x.id,x.star,x.items||[],x.fed||null)}" alt="">
       <div><b>${d.n}</b> ${x.star>1?'★'.repeat(x.star):''}<div class="muted small">${rl(d.r)}${su.sym} · ${su.name} · союз «${su.trait}» · стоимость ${d.c}</div></div></div>
     <div class="info-stats"><span>${st.atk} АТК</span><span>${st.hp} ОЗ</span><span class="muted">${d.mm} маны</span></div>
     <p><b>${d.ab.n}.</b> ${AB[d.ab.t](d.ab.v,st.atk)}</p>
+    <p class="small">Съедено карт: ${fn} из ${FEED_MAX}${fn?` (+${x.fed.atk} АТК, +${x.fed.hp} ОЗ)`:''}. ${IS_TOUCH?'Долгое нажатие':'Правый клик'} по герою — скормить ему карту ★★ масти ${su.sym}.</p>
     ${(x.items||[]).length?`<p class="small">Усиления: ${x.items.map(k=>MAGIC[k].n+' — '+magicDesc(k).toLowerCase()).join(' ')}</p>`:''}`;
 }
 let infoTimer=0;
@@ -1825,7 +1981,7 @@ function renderSide(){
   }).join('');
   const legend=HAND_ORDER.slice().reverse().map(k=>`<tr class="${k===hand?'cur':''}"><td>${HANDS[k].n}</td><td>${HANDS[k].ex}. ${handText(k)}</td></tr>`).join('');
   const sb=S.mode==='net'?`<section class="panel"><h3>Игроки</h3><div class="plist">${[...NET.players].sort((a,b)=>(b.alive-a.alive)||(b.hp-a.hp)).map(p=>
-      `<div class="pl ${p.alive?'':'out'} ${p.id===NET.id?'me':''}"><span class="pn">${esc(p.name)}${p.bot?' · бот':''}${p.id===NET.id?' (вы)':''}</span><span class="pb"><i style="width:${Math.max(0,100*p.hp/START_HP)}%"></i></span><b>${p.alive?p.hp+' ОЗ':p.place?p.place+' место':'выбыл'}</b><span class="rd">${(S.phase==='shop'||S.phase==='wait')&&p.alive&&p.ready?'✓':''}</span></div>`).join('')}</div></section>`:'';
+      `<div class="pl ${p.alive?'':'out'} ${p.id===NET.id?'me':''}"><span class="pn">${esc(p.name)}${p.bot?' · бот':''}${p.id===NET.id?' (вы)':''}${p.alive&&(p.streak|0)>=3?` · награда ${p.streak}`:''}</span><span class="pb"><i style="width:${Math.max(0,100*p.hp/START_HP)}%"></i></span><b>${p.alive?p.hp+' ОЗ':p.place?p.place+' место':'выбыл'}</b><span class="rd">${(S.phase==='shop'||S.phase==='wait')&&p.alive&&p.ready?'✓':''}</span></div>`).join('')}</div></section>`:'';
   $('#side').innerHTML=`${sb}
     <section class="panel">
       <h3>Ваша рука</h3>
@@ -1839,7 +1995,7 @@ function renderSide(){
     <details class="panel"><summary>Комбинации и масти</summary>
       <table class="legend">${legend}</table>
       <p class="small muted">Рука собирается из разных героев на поле: копии одного героя считаются одной картой. Союзы мастей тоже считают только разных героев. Бонусы действуют на весь отряд.</p>
-      <p class="small muted">Урон после поражения: 1 + раунд/3, плюс по 1 за каждую выжившую звезду врага (+1 за карты стоимостью 4–5).</p>
+      <p class="small muted">Урон после поражения: (1 + раунд/3 + по 1 за каждую выжившую звезду врага, +1 за карты стоимостью 4–5) × 1,5, но не больше ${DMG_CAP} за раунд. Ва-банк меняет урон: ×2 проигравшему сопернику, ×1,5 себе при поражении.</p>
     </details>`;
   const ul=$('#log');if(ul)ul.scrollTop=ul.scrollHeight;
 }
@@ -1850,6 +2006,10 @@ const RULES=`<ul>
   <li><b>Магия.</b> Усиления выдаются героям между боями (до 2 на героя). Заклинания разыгрываются прямо в бою, до 2 за бой.</li>
   <li><b>Бой идёт сам.</b> Карта бьёт врага на своей линии, а набрав ману, применяет способность.</li>
   <li><b>Управление.</b> Перетаскивайте карты мышью или нажмите на карту, а потом на место. Правая кнопка вращает камеру, колесо приближает.</li>
+  <li><b>Жертвоприношение.</b> ${IS_TOUCH?'Долгое нажатие':'Правый клик'} по герою: всё темнеет, подсвечиваются карты ★★ и выше той же масти. Нажмите на одну — она исчезнет, а герой навсегда получит 15% её АТК и ОЗ. Каждый герой может съесть не больше 2 карт.</li>
+  <li><b>Ва-банк.</b> Когда у вас меньше ОЗ, чем у лидера: победа — соперник теряет вдвое больше, поражение — вы в 1,5 раза больше. Раз в 3 раунда.</li>
+  <li><b>Награда за голову.</b> За игрока с серией из 3+ побед назначается награда: кто прервёт серию, получит столько золота, сколько было побед, и карту магии.</li>
+  <li><b>Защита от разгрома.</b> За один проигранный бой — не больше ${DMG_CAP} ОЗ (кроме ва-банка). Серия поражений даёт больше золота, чем серия побед.</li>
   <li>У каждого по ${START_HP} ОЗ. Кто первым упадёт до нуля, проиграл.</li></ul>
   <p class="credits">Иконки героев и магии: game-icons.net, лицензия CC BY 3.0. Авторы: ${ICON_AUTHORS.join(', ')}.</p>`;
 function renderOverlay(){
@@ -1900,6 +2060,7 @@ function renderOverlay(){
     ov.className='soft';ov.hidden=false;
     ov.innerHTML=`<div class="ovcard ${r.out?'lose':r.outcome}" style="max-width:440px">
       <h2>${r.out?'Вы выбыли':r.outcome==='win'?'Раунд ваш':r.outcome==='lose'?'Раунд проигран':'Ничья'}</h2>
+      ${(r.notes||[]).map(t=>`<p class="note">${esc(t)}</p>`).join('')}
       <div class="dmgline"><span>Вы: <b>${r.dmgP?'−'+r.dmgP:'0'}</b> ОЗ</span><span>${esc(S.opp?S.opp.name:'Соперник')}: <b>${r.dmgE?'−'+r.dmgE:'0'}</b> ОЗ</span></div>
       <p class="small muted">${r.out?'Игра продолжается без вас. Итоговые места появятся в конце.':'Следующий раунд начнётся, когда все закончат бои.'}</p>
       <button class="btn" data-act="peek" style="justify-content:center">Посмотреть на стол</button>
@@ -1924,6 +2085,7 @@ function renderOverlay(){
     ov.className='soft';ov.hidden=false;
     ov.innerHTML=`<div class="ovcard ${r.outcome}" style="max-width:420px">
       <h2>${r.outcome==='win'?'Раунд ваш':r.outcome==='lose'?'Раунд проигран':'Ничья'}</h2>
+      ${(r.notes||[]).map(t=>`<p class="note">${esc(t)}</p>`).join('')}
       <div class="dmgline"><span>Вы: <b>${r.dmgP?'−'+r.dmgP:'0'}</b> ОЗ</span><span>Соперник: <b>${r.dmgE?'−'+r.dmgE:'0'}</b> ОЗ</span></div>
       <button class="btn fightbtn" data-act="next">Следующий раунд</button>
       <button class="btn" data-act="peek" style="justify-content:center">Посмотреть на стол</button></div>`;
@@ -1961,6 +2123,12 @@ document.addEventListener('click',e=>{
   switch(t.dataset.act){
     case 'buy': buy(+t.dataset.i);break;
     case 'buym': buyMagic(+t.dataset.i);break;
+    case 'allin':
+      if(S.phase!=='shop') break;
+      if(S.allin){S.allin=false;toast('Ва-банк отменён');}
+      else if(canAllin()){S.allin=true;sfx('cast');toast('Ва-банк! Победа: соперник теряет вдвое больше ОЗ. Поражение: вы теряете в 1,5 раза больше.','good');}
+      else toast(allinReason(),'bad');
+      renderTop();renderShopbar();break;
     case 'magic': onMagic(+t.dataset.i);break;
     case 'reroll': if(S.phase==='shop'&&p.gold>=2){p.gold-=2;S.shop=rollShop(p.level);S.magicShop=[rollMagic(),rollMagic()];S.locked=false;sfx('reroll');render();}break;
     case 'xp': if(S.phase==='shop'&&p.gold>=4&&p.level<8){const l=p.level;p.gold-=4;addXp(p,4);if(p.level>l){toast(`Уровень ${p.level}: на поле до ${capOf(p.level)} карт`,'good');sfx('level');}else sfx('buy');render();}break;
@@ -2010,6 +2178,7 @@ document.addEventListener('keydown',e=>{
   if(!S||S.showStart) return;
   if(e.key==='Escape'){
     if(S.showRules){S.showRules=false;renderOverlay();}
+    else if(S.feed){endFeed();}
     else if(S.targeting!=null){S.targeting=null;renderHand();renderStage();}
     else if(S.useMagic!=null){S.useMagic=null;render();}
     else if(S.sel){S.sel=null;render();}
@@ -2031,7 +2200,7 @@ const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const SHOP_SECS=45;
 const SITE_URL='https://elzhanserikbaev-cloud.github.io/kozyrnaya-arena/';
-const PEER_PREFIX='kozyrnaya-arena-v2-';
+const PEER_PREFIX='kozyrnaya-arena-v3-';
 const PEER_OPTS={debug:0,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'}]}};
 const NET={tr:null,peer:null,conn:null,conns:new Map(),room:null,ws:null,id:null,hostId:null,isHost:false,name:'',players:[],view:null,hostAddr:'',ips:[],port:8777,started:false,
   bid:null,live:false,inbox:{},waiters:{},oppGone:false,timer:null,
@@ -2245,7 +2414,9 @@ function cleanBoard(b){
   for(let i=0;i<5;i++){
     const u=b[i]; if(!u||!DEF[u.id]) continue;
     const items=(Array.isArray(u.items)?u.items:[]).filter(k=>MAGIC[k]&&MAGIC[k].k==='item').slice(0,2);
+    const fd=u.fed&&typeof u.fed==='object'?{n:Math.min(FEED_MAX,Math.max(0,u.fed.n|0)),atk:Math.min(140,Math.max(0,u.fed.atk|0)),hp:Math.min(1600,Math.max(0,u.fed.hp|0))}:null;
     out[i]={id:u.id,star:Math.min(3,Math.max(1,u.star|0)),items};
+    if(fd&&fd.n) out[i].fed=fd;
   }
   return out;
 }
@@ -2253,13 +2424,13 @@ function cleanSpells(a){
   return (Array.isArray(a)?a:[]).slice(0,2).filter(x=>x&&MAGIC[x.k]&&MAGIC[x.k].k==='spell')
     .map(x=>({k:x.k,caster:x.caster==='home'?'home':'away',tside:x.tside==='home'?'home':'away',lane:Math.min(4,Math.max(0,x.lane|0))}));
 }
-const snapOf=side=>({board:side.board.map(u=>u?{id:u.id,star:u.star,items:u.items||[]}:null),level:side.level});
+const snapOf=side=>({board:side.board.map(u=>u?{id:u.id,star:u.star,items:u.items||[],...(u.fed&&u.fed.n?{fed:u.fed}:{})}:null),level:side.level});
 
 /* ---------- хост ---------- */
 const BOT_NAMES=['Бот Пиковый','Бот Червовый','Бот Бубновый','Бот Трефовый','Бот Джокер','Бот Туз','Бот Король'];
 function hostLobby(){
   broadcast({t:'lobby',started:HOST.started,round:HOST.round,host:NET.id,
-    players:HOST.players.map(p=>({id:p.id,name:p.name,bot:p.bot,hp:p.hp,alive:p.alive,ready:!!p.ready,level:p.level||1,place:p.place||null}))});
+    players:HOST.players.map(p=>({id:p.id,name:p.name,bot:p.bot,hp:p.hp,alive:p.alive,ready:!!p.ready,level:p.level||1,place:p.place||null,streak:(p.bot?p.side.streak:p.streak)||0}))});
 }
 function hostAddBot(){
   if(HOST.started||HOST.players.length>=8) return;
@@ -2291,7 +2462,8 @@ function hostHandle(from,m){
     case 'ready':
       if(!P||!HOST.started||HOST.phase!=='shop'||!P.alive||P.ready) return;
       P.ready=true;
-      P.snap={board:cleanBoard(m.snap&&m.snap.board),level:Math.min(8,Math.max(1,(m.snap&&m.snap.level)|0))};
+      P.snap={board:cleanBoard(m.snap&&m.snap.board),level:Math.min(8,Math.max(1,(m.snap&&m.snap.level)|0)),allin:!!(m.snap&&m.snap.allin)};
+      P.streak=Math.max(-30,Math.min(30,(m.snap&&m.snap.streak)|0));
       P.level=P.snap.level;P.lastSnap=P.snap;
       hostLobby();hostCheckReady();break;
     case 'step':{
@@ -2331,7 +2503,7 @@ function hostBotTurn(p){
   S.round=HOST.round;S.diff='normal';
   try{
     if(HOST.round===1) side.gold=6;
-    else{const interest=Math.min(5,Math.floor(side.gold/10)),st=Math.abs(side.streak);side.gold+=5+interest+(st>=3?2:st>=2?1:0);addXp(side,2);}
+    else{const interest=Math.min(5,Math.floor(side.gold/10));side.gold+=5+interest+streakGold(side.streak);addXp(side,2);}
     side.hand=[];
     aiTurn(side);
   } finally {S.round=keepRound;S.diff=keepDiff;}
@@ -2350,7 +2522,8 @@ function hostBattles(){
   const ps=HOST.players.filter(p=>p.alive).sort(()=>Math.random()-.5);
   const seed=()=>Math.floor(Math.random()*2147483647);
   const info=(p,ghost)=>({id:p.id,name:(ghost?'Призрак: ':'')+p.name,bot:p.bot&&!ghost,ghost:!!ghost,
-    board:p.snap?p.snap.board:Array(5).fill(null),level:p.level||1,hand:p.bot&&!ghost?p.side.hand.filter(k=>MAGIC[k].k==='spell'):[]});
+    board:p.snap?p.snap.board:Array(5).fill(null),level:p.level||1,hand:p.bot&&!ghost?p.side.hand.filter(k=>MAGIC[k].k==='spell'):[],
+    allin:!ghost&&!p.bot&&!!(p.snap&&p.snap.allin),streak:ghost?0:((p.bot?p.side.streak:p.streak)||0)});
   const send=(p,opp,bid,sd,home,live)=>{HOST.pending.add(p.id);sendTo(p.id,{t:'battle',bid,seed:sd,home,live,opp});};
   for(let i=0;i+1<ps.length;i+=2){
     const a=ps[i],b=ps[i+1],bid=HOST.bidc++,sd=seed();
@@ -2369,7 +2542,7 @@ function hostBattles(){
 function hostBotFight(a,b,ghost){
   const units=p=>(p.snap?p.snap.board:[]).filter(Boolean);
   const sc=p=>{const us=units(p),H=HANDS[teamInfo(us).hand];return us.reduce((s,u)=>s+power(u),0)*(1+(H.atk+H.hp)/2)*(.75+Math.random()*.5);};
-  const base=1+Math.floor(HOST.round/3),dmg=w=>base+Math.max(1,Math.round(units(w).length*.8));
+  const base=1+Math.floor(HOST.round/3),dmg=w=>roundDamage(base,Math.max(1,Math.round(units(w).length*.8)));
   const aw=sc(a)>=sc(b);
   if(aw){botStreak(a.side,true);if(!ghost){b.hp=Math.max(0,b.hp-dmg(a));botStreak(b.side,false);}}
   else{a.hp=Math.max(0,a.hp-dmg(b));botStreak(a.side,false);if(!ghost)botStreak(b.side,true);}
@@ -2428,7 +2601,7 @@ function netTick(){
 function netReady(){
   if(!S||S.phase!=='shop') return;
   S.phase='wait';S.sel=null;S.useMagic=null;dragging=null;
-  sendHost({t:'ready',snap:snapOf(S.p)});
+  sendHost({t:'ready',snap:{...snapOf(S.p),allin:!!S.allin,streak:S.p.streak}});
   sfx('place');render();
 }
 async function netBattle(m){
@@ -2436,10 +2609,10 @@ async function netBattle(m){
   if(S.phase==='shop') netReady();
   const o=m.opp||{};
   S.ai=newSide();S.ai.level=(o.level|0)||1;
-  S.ai.board=cleanBoard(o.board).map(u=>u?{uid:uidc++,id:u.id,star:u.star,items:u.items}:null);
+  S.ai.board=cleanBoard(o.board).map(u=>u?{uid:uidc++,...u}:null);
   S.ai.hand=(Array.isArray(o.hand)?o.hand:[]).filter(k=>MAGIC[k]&&MAGIC[k].k==='spell').slice(0,2);
   const pl=NET.players.find(p=>p.id===o.id);S.ai.hp=pl?pl.hp:START_HP;
-  S.opp={id:o.id,name:String(o.name||'Соперник').slice(0,30),bot:!!o.bot,ghost:!!o.ghost};
+  S.opp={id:o.id,name:String(o.name||'Соперник').slice(0,30),bot:!!o.bot,ghost:!!o.ghost,allin:!!o.allin,streak:o.streak|0};
   NET.bid=m.bid;NET.live=!!m.live;NET.inbox={};NET.waiters={};NET.oppGone=false;
   S.home=!!m.home;S.rng=mulberry32(m.seed|0);S.pendingSpells=[];S.queued=[];
   S.phase='battle';S.sel=null;S.log=[];S.peek=false;
