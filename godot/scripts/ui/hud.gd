@@ -6,9 +6,9 @@ extends CanvasLayer
 
 signal act(name: String, arg: Variant)
 
-const SIDE_W := 330
-const BOTTOM_H := 214
-const TOP_H := 56
+const SIDE_W := 300
+const BOTTOM_H := 186
+const TOP_H := 50
 
 var root: Control
 var top: PanelContainer
@@ -65,6 +65,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = UiTheme.build()
+	root.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(root)
 	_build_top()
 	_build_side()
@@ -165,7 +166,7 @@ func _build_side() -> void:
 	sc.add_child(v)
 	# рука
 	var hs := _section("Ваша рука")
-	hand_name = _label("Старшая карта", "TitleLabel", 26)
+	hand_name = _label("Старшая карта", "TitleLabel", 24)
 	hand_bonus = _label("без бонуса", "MutedLabel")
 	hand_cards = HFlowContainer.new()
 	hand_cards.add_theme_constant_override("h_separation", 4)
@@ -222,15 +223,15 @@ func _build_bottom() -> void:
 	bottom.add_child(h)
 	# экономика
 	var econ := VBoxContainer.new()
-	econ.custom_minimum_size.x = 190
+	econ.custom_minimum_size.x = 180
 	econ.add_theme_constant_override("separation", 4)
 	var gh := HBoxContainer.new()
 	var coin := TextureRect.new()
 	coin.texture = UiTheme.icon("coin")
-	coin.custom_minimum_size = Vector2(32, 32)
+	coin.custom_minimum_size = Vector2(28, 28)
 	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	lbl_gold = _label("0", "TitleLabel", 34)
+	lbl_gold = _label("0", "TitleLabel", 30)
 	lbl_income = _label("", "MutedLabel")
 	gh.add_child(coin); gh.add_child(lbl_gold); gh.add_child(lbl_income)
 	lbl_level = _label("Уровень 1 · поле до 2 карт", "", 15)
@@ -256,7 +257,7 @@ func _build_bottom() -> void:
 	for spec in [["reroll", "Обновить  2", "BlueButton"], ["xp", "Опыт +4  4", "BlueButton"], ["lock", "Закрепить", ""],
 			["sell", "Продать", ""], ["allin", "Ва-банк", "RedButton"], ["fight", "В бой!", "GoldButton"]]:
 		var b := _btn(spec[1], spec[0], spec[2])
-		b.custom_minimum_size = Vector2(140, 46)
+		b.custom_minimum_size = Vector2(128, 40)
 		btns[spec[0]] = b
 		shop_grid.add_child(b)
 	h.add_child(shop_grid)
@@ -267,7 +268,7 @@ func _build_bottom() -> void:
 	speed_grid.add_theme_constant_override("v_separation", 8)
 	for spec in [["speed", "Скорость ×1", 1], ["speed", "Скорость ×2", 2], ["speed", "Скорость ×4", 4], ["skip", "Пропустить", null]]:
 		var b := _btn(spec[1], spec[0], "", spec[2])
-		b.custom_minimum_size = Vector2(140, 46)
+		b.custom_minimum_size = Vector2(128, 40)
 		btns["%s%s" % [spec[0], str(spec[2]) if spec[2] != null else ""]] = b
 		speed_grid.add_child(b)
 	speed_grid.visible = false
@@ -278,13 +279,13 @@ func _build_bottom() -> void:
 	shop_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	for i in 5:
-		var tb := _card_button("buy", i, 128)
+		var tb := _card_button("buy", i, 112)
 		shop_buttons.append(tb)
 		shop_box.add_child(tb)
 	var sep := VSeparator.new()
 	shop_box.add_child(sep)
 	for i in 2:
-		var tb := _card_button("buy_magic", i, 128)
+		var tb := _card_button("buy_magic", i, 112)
 		magic_buttons.append(tb)
 		shop_box.add_child(tb)
 	h.add_child(shop_box)
@@ -296,6 +297,25 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 	tb.custom_minimum_size = Vector2(w, w * 1.4)
 	tb.focus_mode = Control.FOCUS_NONE
 	tb.pressed.connect(func(): act.emit(action, i))
+	var big := w >= 100
+	for spec in [["tl", Vector2(0, 0), HORIZONTAL_ALIGNMENT_LEFT], ["tr", Vector2(1, 0), HORIZONTAL_ALIGNMENT_RIGHT],
+			["bl", Vector2(0, 1), HORIZONTAL_ALIGNMENT_LEFT], ["br", Vector2(1, 1), HORIZONTAL_ALIGNMENT_RIGHT]]:
+		var l := Label.new()
+		l.name = spec[0]
+		l.theme_type_variation = "TitleLabel"
+		l.add_theme_font_size_override("font_size", 17 if big else 15)
+		l.add_theme_constant_override("outline_size", 7)
+		l.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.05, 0.95))
+		l.horizontal_alignment = spec[2]
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.anchor_left = spec[1].x; l.anchor_right = spec[1].x
+		l.anchor_top = spec[1].y; l.anchor_bottom = spec[1].y
+		var lw := 60.0
+		l.offset_left = 4.0 if spec[1].x == 0 else -lw - 4.0
+		l.offset_right = lw + 4.0 if spec[1].x == 0 else -4.0
+		l.offset_top = 0.0 if spec[1].y == 0 else -24.0
+		l.offset_bottom = 24.0 if spec[1].y == 0 else 0.0
+		tb.add_child(l)
 	tb.mouse_entered.connect(func():
 		act.emit("hover_" + action, i)
 		var tw := tb.create_tween()
@@ -316,7 +336,7 @@ func _build_hand() -> void:
 	hand_box.add_theme_constant_override("separation", 6)
 	v.add_child(hand_box)
 	for i in Data.HAND_MAX:
-		var tb := _card_button("hand", i, 78)
+		var tb := _card_button("hand", i, 74)
 		hand_buttons.append(tb)
 		hand_box.add_child(tb)
 
@@ -410,7 +430,7 @@ func set_hand_info(hand_key: String, cards: Array, traits: Dictionary) -> void:
 		var lv: int = traits.lv[s]
 		var cell := PanelContainer.new()
 		cell.theme_type_variation = "ChipPanel"
-		cell.custom_minimum_size = Vector2(141, 66)
+		cell.custom_minimum_size = Vector2(126, 62)
 		cell.modulate = Color.WHITE if lv > 0 else Color(1, 1, 1, 0.6)
 		var hb := HBoxContainer.new()
 		var em := TextureRect.new()
@@ -425,7 +445,7 @@ func set_hand_info(hand_key: String, cards: Array, traits: Dictionary) -> void:
 		t.add_theme_color_override("font_color", su.color.lightened(0.4))
 		var dsc := _label(Data.trait_text(s, max(lv, 1)), "MutedLabel", 13)
 		dsc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		dsc.custom_minimum_size.x = 92
+		dsc.custom_minimum_size.x = 82
 		vb.add_child(t); vb.add_child(dsc)
 		hb.add_child(em); hb.add_child(vb)
 		cell.add_child(hb)
@@ -470,11 +490,15 @@ func set_shop(ids: Array, gold: int) -> void:
 		tb.visible = true
 		if id == null:
 			tb.texture_normal = null
+			_corner(tb, "", "", "", "", Color.WHITE)
 			tb.disabled = true
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
 			tb.texture_normal = CardFaces.face(id, 1)
 			tb.disabled = false
+			var d: Dictionary = Data.HEROES[id]
+			var st: Dictionary = Rules.stats({"id": id, "star": 1})
+			_corner(tb, Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, str(d.c), str(st.atk), str(st.hp), Data.SUITS[d.s].color.lightened(0.45))
 			tb.modulate = Color.WHITE if gold >= int(Data.HEROES[id].c) else Color(0.55, 0.5, 0.5, 1)
 
 func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
@@ -483,10 +507,19 @@ func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
 		var k = keys[i] if i < keys.size() else null
 		if k == null:
 			tb.texture_normal = null
+			_corner(tb, "", "", "", "", Color.WHITE)
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
 			tb.texture_normal = CardFaces.magic_face(k, round_n)
+			_corner(tb, str(Data.MAGIC[k].c), "", "", "", UiTheme.GOLD)
 			tb.modulate = Color.WHITE if gold >= int(Data.MAGIC[k].c) else Color(0.55, 0.5, 0.5, 1)
+
+## Подписи на карточной кнопке: ранг (tl), цена (tr), АТК (bl), ОЗ (br).
+func _corner(tb: TextureButton, tl: String, tr: String, bl: String, br: String, tl_col: Color) -> void:
+	var a: Label = tb.get_node("tl"); a.text = tl; a.add_theme_color_override("font_color", tl_col)
+	var b: Label = tb.get_node("tr"); b.text = tr; b.add_theme_color_override("font_color", UiTheme.GOLD)
+	var c: Label = tb.get_node("bl"); c.text = bl; c.add_theme_color_override("font_color", Color("ff9b8f"))
+	var d: Label = tb.get_node("br"); d.text = br; d.add_theme_color_override("font_color", Color("8ff0b0"))
 
 func set_hand(keys: Array, round_n: int, selected := -1, battle := false) -> void:
 	hand_title.text = ("Рука магии · заклинаний за бой" if battle else "Рука магии %d/%d") % ([] if battle else [keys.size(), Data.HAND_MAX])
@@ -495,6 +528,7 @@ func set_hand(keys: Array, round_n: int, selected := -1, battle := false) -> voi
 		if i < keys.size():
 			tb.visible = true
 			tb.texture_normal = CardFaces.magic_face(keys[i], round_n)
+			_corner(tb, "", "", "", "", Color.WHITE)
 			var usable: bool = (Data.MAGIC[keys[i]].k == "spell") == battle
 			tb.modulate = Color(1.15, 1.08, 0.9) if i == selected else (Color.WHITE if usable else Color(0.6, 0.6, 0.6, 0.85))
 		else:

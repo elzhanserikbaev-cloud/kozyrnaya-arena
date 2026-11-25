@@ -4,7 +4,7 @@ config_version=5
 [application]
 config/name="Козырная Арена"
 config/description="3D карточный автобаттлер с покерными комбинациями и стихиями"
-config/version="2.0.1"
+config/version="2.0.2"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icon.png"
@@ -32,3 +32,5 @@ renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/msaa_2d=1
+textures/default_filters/anisotropic_filtering_level=4

@@ -30,6 +30,7 @@ var _hp_ratio := 1.0
 var _move_tw: Tween
 var atk_label: Label3D
 var hp_label_face: Label3D
+var rank_label: Label3D
 
 static var _quad: QuadMesh
 
@@ -89,6 +90,8 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	_build_bars()
 	atk_label = _stat_label(Vector2(112, 662), Color("ffe3d6"))
 	hp_label_face = _stat_label(Vector2(400, 662), Color("dcffe6"))
+	rank_label = _stat_label(Vector2(70, 76), Color.WHITE)
+	rank_label.font_size = 64
 	set_tilt(true)
 	return self
 
@@ -105,9 +108,11 @@ func _stat_label(px: Vector2, col: Color) -> Label3D:
 	pivot.add_child(l)
 	return l
 
-func set_stats(atk: int, hp: int) -> void:
+func set_stats(atk: int, hp: int, rank := "", rank_col := Color.WHITE) -> void:
 	atk_label.text = str(atk)
 	hp_label_face.text = str(hp)
+	rank_label.text = rank
+	rank_label.modulate = rank_col
 
 ## Карта «стоит» с наклоном к камере (на столе) или лежит плашмя (в полёте/руке).
 func set_tilt(standing: bool) -> void:

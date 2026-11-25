@@ -23,9 +23,9 @@ var env: Environment
 var slots := {}                # "board:i" / "bench:i" / "sell" → MeshInstance3D
 var slot_mats := {}
 var hovered: Card3D
-var side_px := 350.0
-var top_px := 56.0
-var bottom_px := 234.0
+var side_px := 320.0
+var top_px := 50.0
+var bottom_px := 206.0
 
 static func pos_board(i: int) -> Vector3: return Vector3((i - 2) * 1.6, 0, 1.95)
 static func pos_enemy(i: int) -> Vector3: return Vector3((i - 2) * 1.6, 0, -2.1)

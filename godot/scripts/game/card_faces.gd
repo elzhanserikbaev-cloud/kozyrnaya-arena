@@ -159,8 +159,7 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	_rect_tex(root, tex("res://assets/portraits/hero_%s.png" % id), PORTRAIT, su.color.darkened(0.4))
 	_rect_tex(root, tex("res://assets/cards/frame_%s_%d.png" % [el, star]), Rect2(0, 0, TW, TH), Color(0, 0, 0, 0))
 	# угловой медальон: ранг и стихия
-	_label(root, Rules.rank_label(int(d.r)) + su.sym, Rect2(CORNER_C - Vector2(44, 32), Vector2(88, 64)), f_bold, 38, Color.WHITE,
-		HORIZONTAL_ALIGNMENT_CENTER, 8, Color(0.06, 0.04, 0.03, 0.95))
+	# ранг, АТК и ОЗ рисуются чёткими подписями поверх карты (3D: Label3D, интерфейс: Label)
 	# цена в октагоне
 	_centered(root, str(d.c), GEM_C, f_bold, 40, Color("fff6dc"), 10)
 	# усиления — значки справа на портрете
@@ -192,9 +191,6 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 		Color("3a2614"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 4)
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	desc.remove_theme_color_override("font_shadow_color")
-	var st: Dictionary = Rules.stats({"id": id, "star": star, "fed": fed})
-	_centered(root, str(st.atk), ATK_C, f_bold, 52 if str(st.atk).length() < 4 else 44, Color.WHITE, 14)
-	_centered(root, str(st.hp), HP_C, f_bold, 52 if str(st.hp).length() < 4 else 44, Color.WHITE, 14)
 	_centered(root, str(d.mm), MANA_C, f_bold, 36, Color("eef4ff"), 12)
 
 func _build_magic(root: Control, k: String, power_round: int) -> void:

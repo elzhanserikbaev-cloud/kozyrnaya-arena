@@ -230,7 +230,8 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 					c.position = w.pos
 		c.set_meta("u", u)
 		var st := Rules.stats(u)
-		c.set_stats(int(st.atk), int(st.hp))
+		var hd: Dictionary = Data.HEROES[u.id]
+		c.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55))
 
 func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 	_sync_cards(animate, spawn_from)
