@@ -433,20 +433,22 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 		l.offset_top = 0.0 if spec[1].y == 0 else -24.0
 		l.offset_bottom = 24.0 if spec[1].y == 0 else 0.0
 		tb.add_child(l)
-	if big and w < 200:
-		var nm := Label.new()
-		nm.name = "nm"
-		nm.theme_type_variation = "TitleLabel"
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		nm.add_theme_color_override("font_color", Color("fff4d6"))
-		nm.add_theme_constant_override("outline_size", 6)
-		nm.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.03, 1))
-		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		nm.anchor_left = 0; nm.anchor_right = 1
-		nm.anchor_top = 362.0 / 716.0; nm.anchor_bottom = 408.0 / 716.0
-		nm.offset_left = 3; nm.offset_right = -3; nm.offset_top = -2; nm.offset_bottom = 2
-		tb.add_child(nm)
+	# имя на ленте — подписью поверх (лицо карты запекается без имени), в том же стиле, что и на столе
+	var nm := Label.new()
+	nm.name = "nm"
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	nm.add_theme_font_override("font", CardFaces.f_title)
+	nm.add_theme_color_override("font_color", CardFaces.NAME_COL)
+	nm.add_theme_constant_override("outline_size", maxi(3, int(w * 0.035)))
+	nm.add_theme_color_override("font_outline_color", CardFaces.NAME_OUT)
+	nm.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	nm.add_theme_constant_override("shadow_offset_y", 1 if w < 200 else 2)
+	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	nm.anchor_left = 0; nm.anchor_right = 1
+	nm.anchor_top = 362.0 / 716.0; nm.anchor_bottom = 408.0 / 716.0
+	nm.offset_left = 2; nm.offset_right = -2; nm.offset_top = -3; nm.offset_bottom = 3
+	tb.add_child(nm)
 	# наведение: лёгкое увеличение от нижнего края (масштаб, а не сдвиг — карта не «уплывает»)
 	tb.resized.connect(func(): tb.pivot_offset = Vector2(tb.size.x * 0.5, tb.size.y))
 	tb.mouse_entered.connect(func():
@@ -663,7 +665,7 @@ func set_shop(ids: Array, gold: int) -> void:
 			tb.disabled = true
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
-			tb.texture_normal = CardFaces.face(id, 1)
+			tb.texture_normal = CardFaces.face(id, 1, [], null, false)
 			tb.disabled = false
 			var d: Dictionary = Data.HEROES[id]
 			var st: Dictionary = Rules.stats({"id": id, "star": 1})
@@ -693,7 +695,7 @@ func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
 			_set_name(tb, "")
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
-			tb.texture_normal = CardFaces.magic_face(k, round_n)
+			tb.texture_normal = CardFaces.magic_face(k, round_n, false)
 			_corner(tb, str(Data.MAGIC[k].c), "", "", "", UiTheme.GOLD)
 			_set_name(tb, String(Data.MAGIC[k].n))
 			tb.self_modulate = Color(1.18, 1.14, 1.22)   # тёмная фиолетовая рамка — чуть светлее
@@ -705,10 +707,11 @@ func _set_name(tb: TextureButton, text: String) -> void:
 		return
 	var l: Label = tb.get_node("nm")
 	l.text = text
-	var f: Font = l.get_theme_font("font")
-	var w := tb.custom_minimum_size.x - 8.0
-	var fs := 15
-	while fs > 10 and f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w:
+	var f: Font = CardFaces.f_title
+	var cw := tb.custom_minimum_size.x
+	var w := cw * 0.86
+	var fs := int(cw * 0.135)
+	while fs > int(cw * 0.085) and f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w:
 		fs -= 1
 	l.add_theme_font_size_override("font_size", fs)
 
@@ -742,7 +745,8 @@ func show_zoom_hero(u: Dictionary, near: Vector2) -> void:
 		_build_zoom()
 	var d: Dictionary = Data.HEROES[u.id]
 	var st: Dictionary = Rules.stats(u)
-	zoom.texture_normal = CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed"))
+	zoom.texture_normal = CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed"), false)
+	_set_name(zoom, String(d.n))
 	_corner(zoom, Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, str(d.c), str(st.atk), str(st.hp), Data.SUITS[d.s].color.lightened(0.45))
 	var sl: Label = zoom.get_node("st")
 	sl.text = "★".repeat(int(u.star)) if int(u.star) > 1 else ""
@@ -766,7 +770,8 @@ func set_hand(keys: Array, round_n: int, selected := -1, battle := false) -> voi
 		var tb: TextureButton = hand_buttons[i]
 		if i < keys.size():
 			tb.visible = true
-			tb.texture_normal = CardFaces.magic_face(keys[i], round_n)
+			tb.texture_normal = CardFaces.magic_face(keys[i], round_n, false)
+			_set_name(tb, String(Data.MAGIC[keys[i]].n))
 			_corner(tb, "", "", "", "", Color.WHITE)
 			var usable: bool = (Data.MAGIC[keys[i]].k == "spell") == battle
 			tb.self_modulate = Color(1.18, 1.14, 1.22)

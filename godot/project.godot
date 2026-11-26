@@ -4,7 +4,7 @@ config_version=5
 [application]
 config/name="Козырная Арена"
 config/description="3D карточный автобаттлер с покерными комбинациями и стихиями"
-config/version="2.2.1"
+config/version="2.2.2"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icon.png"

@@ -60,13 +60,27 @@ func fed_key(fed) -> String:
 	return "" if fed == null or int(fed.get("n", 0)) == 0 else "f%d_%d_%d" % [fed.n, fed.atk, fed.hp]
 
 ## Лицо героя. items — ключи магии, fed — {atk,hp,n} или null.
-func face(id: String, star: int, items: Array = [], fed = null) -> Texture2D:
-	var key := "h|%s|%d|%s|%s" % [id, star, ",".join(items), fed_key(fed)]
-	return _job(key, func(root: Control): _build_hero(root, id, star, items, fed))
+## named=false — без имени на ленте: его рисует поверх сама карта (3D-подпись или подпись кнопки), чтобы не было двойного текста.
+func face(id: String, star: int, items: Array = [], fed = null, named := true) -> Texture2D:
+	var key := "h|%s|%d|%s|%s|%s" % [id, star, ",".join(items), fed_key(fed), "n" if named else "-"]
+	return _job(key, func(root: Control): _build_hero(root, id, star, items, fed, named))
 
-func magic_face(k: String, power_round: int = 1) -> Texture2D:
-	var key := "m|%s|%d" % [k, power_round if Data.MAGIC[k].k == "spell" else 0]
-	return _job(key, func(root: Control): _build_magic(root, k, power_round))
+func magic_face(k: String, power_round: int = 1, named := true) -> Texture2D:
+	var key := "m|%s|%d|%s" % [k, power_round if Data.MAGIC[k].k == "spell" else 0, "n" if named else "-"]
+	return _job(key, func(root: Control): _build_magic(root, k, power_round, named))
+
+## Единый стиль имени на ленте: фигурный шрифт, тёплое золото, тонкая тёмная обводка и тень.
+const NAME_COL := Color("ffe6ae")
+const NAME_OUT := Color("2b1709")
+
+func _ribbon_name(root: Control, text: String) -> void:
+	var r := NAME_RECT.grow_individual(-6, 2, -6, 2)
+	var fs := 46
+	while fs > 22 and f_title.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > r.size.x:
+		fs -= 1
+	var l := _label(root, text, r, f_title, fs, NAME_COL, HORIZONTAL_ALIGNMENT_CENTER, 9, NAME_OUT, false)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	l.add_theme_constant_override("shadow_offset_y", 3)
 
 func back() -> Texture2D:
 	var t := tex("res://assets/cards/back.png")
@@ -163,17 +177,10 @@ func _fit_size(text: String, font: Font, w: float, h: float, hi: int, lo: int) -
 		fs -= 1
 	return fs
 
-## Название на ленте: заглавными, а если так получается мелко — обычными буквами (они уже).
-func _name_text(n: String, font: Font, w: float, want: int) -> String:
-	var up := n.to_upper()
-	if font.get_string_size(up, HORIZONTAL_ALIGNMENT_LEFT, -1, want - 8).x <= w:
-		return up
-	return n
-
 func _centered(root: Control, text: String, c: Vector2, font: Font, size: int, col: Color, outline := 8) -> void:
 	_label(root, text, Rect2(c - Vector2(70, 40), Vector2(140, 80)), font, size, col, HORIZONTAL_ALIGNMENT_CENTER, outline)
 
-func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> void:
+func _build_hero(root: Control, id: String, star: int, items: Array, fed, named := true) -> void:
 	var d: Dictionary = Data.HEROES[id]
 	var el: String = ELEM[d.s]
 	var su: Dictionary = Data.SUITS[d.s]
@@ -205,7 +212,8 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 			pip.position = Vector2(PORTRAIT.position.x + 98 + i * 34, PORTRAIT.position.y + 8)
 			pip.size = Vector2(26, 26)
 			root.add_child(pip)
-	_label(root, _name_text(String(d.n), f_bold, NAME_RECT.size.x, 42), NAME_RECT, f_bold, 42, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
+	if named:
+		_ribbon_name(root, String(d.n))
 	# пергамент: название способности и её действие — крупно, размер подбирается под место
 	var t := TEXT_RECT
 	_label(root, d.ab.n, Rect2(t.position - Vector2(0, 4), Vector2(t.size.x, 42)), f_title, 36, Color("5a1f12"), HORIZONTAL_ALIGNMENT_CENTER, 0)
@@ -217,13 +225,14 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	desc.remove_theme_color_override("font_shadow_color")
 	_centered(root, str(d.mm), MANA_C, f_bold, 36, Color("eef4ff"), 12)
 
-func _build_magic(root: Control, k: String, power_round: int) -> void:
+func _build_magic(root: Control, k: String, power_round: int, named := true) -> void:
 	var m: Dictionary = Data.MAGIC[k]
 	var item: bool = m.k == "item"
 	_rect_tex(root, tex("res://assets/portraits/magic_%s.png" % k), Rect2(MAGIC_ICON_C - Vector2(150, 150), Vector2(300, 300)), Color("3a2a4a"))
 	_rect_tex(root, tex("res://assets/cards/frame_%s.png" % ("item" if item else "spell")), Rect2(0, 0, TW, TH))
 	_label(root, str(m.c), Rect2(CORNER_C - Vector2(40, 30), Vector2(80, 60)), f_title, 40, Color("fff1c9"), HORIZONTAL_ALIGNMENT_CENTER, 8, Color(0.06, 0.04, 0.03, 0.95))
-	_label(root, _name_text(String(m.n), f_title, NAME_RECT.size.x, 42), NAME_RECT, f_title, 42, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
+	if named:
+		_ribbon_name(root, String(m.n))
 	var t := TEXT_RECT
 	_label(root, "Усиление" if item else "Заклинание", Rect2(t.position - Vector2(0, 4), Vector2(t.size.x, 36)), f_title, 30, Color("2f5a66") if item else Color("6a2a8a"), HORIZONTAL_ALIGNMENT_CENTER, 0)
 	var dtext: String = Data.magic_desc(k, power_round)

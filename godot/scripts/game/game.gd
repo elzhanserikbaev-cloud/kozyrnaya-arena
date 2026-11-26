@@ -411,7 +411,7 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 	for k in want:
 		var w: Dictionary = want[k]
 		var u: Dictionary = w.u
-		var tex := CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed"))
+		var tex := CardFaces.face(u.id, int(u.star), u.get("items", []), u.get("fed"), false)
 		var c: Card3D = cards.get(k)
 		if c == null:
 			c = Card3D.new()
@@ -1240,7 +1240,7 @@ func _animate(evs: Array, b, my_tag: String) -> void:
 				var su := {"uid": int(e.uid), "id": String(e.id), "star": int(e.star), "items": [], "fed": null}
 				var nc := Card3D.new()
 				table.add_child(nc)
-				nc.setup("hero", su.id, CardFaces.face(su.id, su.star), su.uid, "p" if e.side == my_tag else "e")
+				nc.setup("hero", su.id, CardFaces.face(su.id, su.star, [], null, false), su.uid, "p" if e.side == my_tag else "e")
 				nc.position = pos
 				nc.home_pos = pos
 				nc.set_meta("u", su)

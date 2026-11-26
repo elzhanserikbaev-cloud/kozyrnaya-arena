@@ -115,8 +115,9 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	star_label = _stat_label(Vector2(256, 22), Color("ffd45a"))
 	star_label.font_size = 92
 	star_label.outline_size = 26
-	name_label = _stat_label(Vector2(256, 385), Color("fff4d6"))
-	name_label.outline_size = 18
+	name_label = _stat_label(Vector2(256, 385), Color(0.9, 0.8, 0.58))   # сливочное золото (свет сцены его осветляет) — читается на любой ленте
+	name_label.font = CardFaces.f_title
+	name_label.outline_modulate = CardFaces.NAME_OUT
 	set_tilt(true)
 	return self
 
@@ -202,15 +203,16 @@ func set_stats(atk: int, hp: int, rank := "", rank_col := Color.WHITE, star := 1
 	rank_label.modulate = rank_col
 	star_label.text = "★".repeat(star) if star > 1 else ""
 	star_label.modulate = Color("ffd45a") if star >= 3 else Color("eef3ff")
-	# подгоняем размер под ширину ленты (≈ 340 px при pixel_size 0.003); длинные имена — обычными буквами, они уже
-	var n := maxf(1.0, title.length())
-	var fs := int(340.0 / (0.66 * n))
-	if fs >= 44:
-		name_label.text = title.to_upper()
-	else:
-		name_label.text = title
-		fs = int(340.0 / (0.55 * n))
-	name_label.font_size = clampi(fs, 32, 58)
+	# имя в стиле карт: фигурный шрифт, тёплое золото; размер — по реальной ширине текста на ленте (≈ 330 px)
+	# шрифт растеризуется близко к экранному размеру (крупный pixel_size, мелкий font_size) — буквы не «мылятся»
+	name_label.text = title
+	var k := 2.6
+	name_label.pixel_size = 0.003 * k
+	var fs := 20
+	while fs > 12 and name_label.font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > 330.0 / k:
+		fs -= 1
+	name_label.font_size = fs
+	name_label.outline_size = 5
 
 ## Карта «стоит» с наклоном к камере (на столе) или лежит плашмя (в полёте/руке).
 func set_tilt(standing: bool) -> void:
