@@ -30,7 +30,7 @@ var f_bold: Font
 
 func _ready() -> void:
 	f_title = _font("res://assets/fonts/Philosopher-Bold.ttf", true)
-	f_body = _font("res://assets/fonts/Rubik-Regular.ttf", false)
+	f_body = _font("res://assets/fonts/Rubik-Medium.ttf", false, 520)   # чуть плотнее обычного — читается на маленьких картах
 	f_bold = _font("res://assets/fonts/Rubik-Bold.ttf", true)
 	_vp = SubViewport.new()
 	_vp.size = Vector2i(TW, TH)
@@ -39,7 +39,7 @@ func _ready() -> void:
 	_vp.disable_3d = true
 	add_child(_vp)
 
-func _font(path: String, bold: bool) -> Font:
+func _font(path: String, bold: bool, weight := 0) -> Font:
 	if ResourceLoader.exists(path):
 		return load(path)
 	# запасной вариант: Rubik может лежать как вариативный шрифт
@@ -47,7 +47,7 @@ func _font(path: String, bold: bool) -> Font:
 		if ResourceLoader.exists(alt):
 			var fv := FontVariation.new()
 			fv.base_font = load(alt)
-			fv.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700 if bold else 400}
+			fv.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): weight if weight > 0 else (700 if bold else 400)}
 			return fv
 	var sf := SystemFont.new()
 	sf.font_names = PackedStringArray(["Georgia" if bold else "Segoe UI", "DejaVu Sans"])
@@ -153,6 +153,23 @@ func _label(root: Control, text: String, r: Rect2, font: Font, size: int, col: C
 	l.clip_text = lines > 1
 	return l
 
+## Наибольший размер шрифта, при котором текст с переносами влезает в прямоугольник.
+func _fit_size(text: String, font: Font, w: float, h: float, hi: int, lo: int) -> int:
+	var fs := hi
+	while fs > lo:
+		var sz := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, w, fs)
+		if sz.y <= h:
+			break
+		fs -= 1
+	return fs
+
+## Название на ленте: заглавными, а если так получается мелко — обычными буквами (они уже).
+func _name_text(n: String, font: Font, w: float, want: int) -> String:
+	var up := n.to_upper()
+	if font.get_string_size(up, HORIZONTAL_ALIGNMENT_LEFT, -1, want - 8).x <= w:
+		return up
+	return n
+
 func _centered(root: Control, text: String, c: Vector2, font: Font, size: int, col: Color, outline := 8) -> void:
 	_label(root, text, Rect2(c - Vector2(70, 40), Vector2(140, 80)), font, size, col, HORIZONTAL_ALIGNMENT_CENTER, outline)
 
@@ -188,12 +205,14 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 			pip.position = Vector2(PORTRAIT.position.x + 98 + i * 34, PORTRAIT.position.y + 8)
 			pip.size = Vector2(26, 26)
 			root.add_child(pip)
-	_label(root, String(d.n).to_upper(), NAME_RECT, f_bold, 36, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
-	# пергамент: название способности и её действие
+	_label(root, _name_text(String(d.n), f_bold, NAME_RECT.size.x, 42), NAME_RECT, f_bold, 42, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
+	# пергамент: название способности и её действие — крупно, размер подбирается под место
 	var t := TEXT_RECT
-	_label(root, d.ab.n, Rect2(t.position, Vector2(t.size.x, 40)), f_title, 30, Color("5a1f12"), HORIZONTAL_ALIGNMENT_CENTER, 0)
-	var desc := _label(root, Data.ab_desc(id, star, fed), Rect2(t.position + Vector2(6, 42), t.size - Vector2(12, 46)), f_body, 26,
-		Color("3a2614"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 4)
+	_label(root, d.ab.n, Rect2(t.position - Vector2(0, 4), Vector2(t.size.x, 42)), f_title, 36, Color("5a1f12"), HORIZONTAL_ALIGNMENT_CENTER, 0)
+	var dtext: String = Data.ab_desc(id, star, fed)
+	var drect := Rect2(t.position + Vector2(0, 38), t.size - Vector2(0, 38))
+	var desc := _label(root, dtext, drect, f_body, _fit_size(dtext, f_body, drect.size.x, drect.size.y, 34, 22),
+		Color("24160a"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 5)
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	desc.remove_theme_color_override("font_shadow_color")
 	_centered(root, str(d.mm), MANA_C, f_bold, 36, Color("eef4ff"), 12)
@@ -204,10 +223,12 @@ func _build_magic(root: Control, k: String, power_round: int) -> void:
 	_rect_tex(root, tex("res://assets/portraits/magic_%s.png" % k), Rect2(MAGIC_ICON_C - Vector2(150, 150), Vector2(300, 300)), Color("3a2a4a"))
 	_rect_tex(root, tex("res://assets/cards/frame_%s.png" % ("item" if item else "spell")), Rect2(0, 0, TW, TH))
 	_label(root, str(m.c), Rect2(CORNER_C - Vector2(40, 30), Vector2(80, 60)), f_title, 40, Color("fff1c9"), HORIZONTAL_ALIGNMENT_CENTER, 8, Color(0.06, 0.04, 0.03, 0.95))
-	_label(root, String(m.n).to_upper(), NAME_RECT, f_title, 34, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 9, Color(0.14, 0.07, 0.03, 0.95))
+	_label(root, _name_text(String(m.n), f_title, NAME_RECT.size.x, 42), NAME_RECT, f_title, 42, Color("fff1c4"), HORIZONTAL_ALIGNMENT_CENTER, 10, Color(0.14, 0.07, 0.03, 0.95))
 	var t := TEXT_RECT
-	_label(root, "Усиление" if item else "Заклинание", Rect2(t.position, Vector2(t.size.x, 38)), f_title, 28, Color("2f5a66") if item else Color("5a2a72"), HORIZONTAL_ALIGNMENT_CENTER, 0)
-	var desc := _label(root, Data.magic_desc(k, power_round), Rect2(t.position + Vector2(0, 42), t.size - Vector2(0, 46)), f_body, 27,
-		Color("3a2614"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 4)
+	_label(root, "Усиление" if item else "Заклинание", Rect2(t.position - Vector2(0, 4), Vector2(t.size.x, 36)), f_title, 30, Color("2f5a66") if item else Color("6a2a8a"), HORIZONTAL_ALIGNMENT_CENTER, 0)
+	var dtext: String = Data.magic_desc(k, power_round)
+	var drect := Rect2(t.position + Vector2(0, 34), t.size - Vector2(0, 34))
+	var desc := _label(root, dtext, drect, f_body, _fit_size(dtext, f_body, drect.size.x, drect.size.y, 34, 22),
+		Color("24160a"), HORIZONTAL_ALIGNMENT_CENTER, 0, Color(0, 0, 0, 0), false, 5)
 	desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	desc.remove_theme_color_override("font_shadow_color")

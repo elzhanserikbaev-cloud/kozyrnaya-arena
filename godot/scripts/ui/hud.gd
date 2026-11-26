@@ -65,8 +65,10 @@ var boss_name: Label
 var boss_fill: ColorRect
 var boss_lag: ColorRect
 var boss_hp_lbl: Label
-var _boss_w := 420.0
+var _boss_w := 330.0
 var step_lbl: Label
+var right_col: VBoxContainer       # правый верхний угол: полоса Стража, «Ход N», подсказка — не закрывают карты соперника
+const RIGHT_W := 370
 
 func _ready() -> void:
 	layer = 5
@@ -332,16 +334,43 @@ func _build_bottom() -> void:
 	shop_box.add_child(VSeparator.new())
 	var magic := VBoxContainer.new()
 	magic.add_theme_constant_override("separation", 2)
-	magic.add_child(_label("МАГИЯ", "HeaderLabel"))
+	var mh := _label("✦ МАГИЯ · заклинания", "HeaderLabel")
+	mh.add_theme_color_override("font_color", MAGIC_COL.lightened(0.35))
+	magic.add_child(mh)
 	var mrow := HBoxContainer.new()
-	mrow.add_theme_constant_override("separation", 8)
+	mrow.add_theme_constant_override("separation", 10)
 	for i in 2:
 		var tb := _card_button("buy_magic", i, 112)
+		_magic_glow(tb)
 		magic_buttons.append(tb)
 		mrow.add_child(tb)
 	magic.add_child(mrow)
 	shop_box.add_child(magic)
 	h.add_child(shop_box)
+
+const MAGIC_COL := Color("b06ae8")
+
+## Карта магии: светлая фиолетовая кайма и мягкое сияние позади, чтобы её было видно на тёмной панели.
+func _magic_glow(tb: TextureButton) -> void:
+	var p := Panel.new()
+	p.name = "glow"
+	p.show_behind_parent = true
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.set_anchors_preset(Control.PRESET_FULL_RECT)
+	p.offset_left = -3; p.offset_top = -3; p.offset_right = 3; p.offset_bottom = 3
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(MAGIC_COL, 0.35)
+	sb.border_color = MAGIC_COL.lightened(0.25)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(9)
+	sb.shadow_color = Color(MAGIC_COL, 0.55)
+	sb.shadow_size = 10
+	p.add_theme_stylebox_override("panel", sb)
+	tb.add_child(p)
+	tb.move_child(p, 0)
+	var tw := p.create_tween().set_loops()
+	tw.tween_property(p, "modulate:a", 0.55, 1.1).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(p, "modulate:a", 1.0, 1.1).set_trans(Tween.TRANS_SINE)
 
 ## Цена на кнопке: монета и число справа.
 func _price(b: Button, n: int) -> void:
@@ -374,6 +403,7 @@ func set_price(key: String, text: String) -> void:
 func toggle_side() -> void:
 	side.visible = not side.visible
 	btn_side.text = "Скрыть" if side.visible else "Сведения"
+	_place_right_col()
 
 func _card_button(action: String, i: int, w := 120) -> TextureButton:
 	var tb := TextureButton.new()
@@ -390,7 +420,7 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 		var l := Label.new()
 		l.name = spec[0]
 		l.theme_type_variation = "TitleLabel"
-		l.add_theme_font_size_override("font_size", 17 if big else 15)
+		l.add_theme_font_size_override("font_size", 19 if big else 16)
 		l.add_theme_constant_override("outline_size", 7)
 		l.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.05, 0.95))
 		l.horizontal_alignment = spec[2]
@@ -403,6 +433,20 @@ func _card_button(action: String, i: int, w := 120) -> TextureButton:
 		l.offset_top = 0.0 if spec[1].y == 0 else -24.0
 		l.offset_bottom = 24.0 if spec[1].y == 0 else 0.0
 		tb.add_child(l)
+	if big and w < 200:
+		var nm := Label.new()
+		nm.name = "nm"
+		nm.theme_type_variation = "TitleLabel"
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		nm.add_theme_color_override("font_color", Color("fff4d6"))
+		nm.add_theme_constant_override("outline_size", 6)
+		nm.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.03, 1))
+		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		nm.anchor_left = 0; nm.anchor_right = 1
+		nm.anchor_top = 362.0 / 716.0; nm.anchor_bottom = 408.0 / 716.0
+		nm.offset_left = 3; nm.offset_right = -3; nm.offset_top = -2; nm.offset_bottom = 2
+		tb.add_child(nm)
 	# наведение: лёгкое увеличение от нижнего края (масштаб, а не сдвиг — карта не «уплывает»)
 	tb.resized.connect(func(): tb.pivot_offset = Vector2(tb.size.x * 0.5, tb.size.y))
 	tb.mouse_entered.connect(func():
@@ -429,32 +473,37 @@ func _build_hand() -> void:
 	hand_box.add_theme_constant_override("separation", 6)
 	v.add_child(hand_box)
 	for i in Data.HAND_MAX:
-		var tb := _card_button("hand", i, 74)
+		var tb := _card_button("hand", i, 80)
+		_magic_glow(tb)
 		hand_buttons.append(tb)
 		hand_box.add_child(tb)
 
 func _build_misc() -> void:
-	hint = PanelContainer.new()
-	hint.theme_type_variation = "TooltipPanel"
-	hint.anchor_left = 0.5; hint.anchor_right = 0.5
-	hint.offset_top = TOP_H + 12
-	hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hint_lbl = _label("", "", 16)
-	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint_lbl.custom_minimum_size.x = 520
-	hint.add_child(hint_lbl)
-	root.add_child(hint)
+	right_col = VBoxContainer.new()
+	right_col.anchor_left = 1; right_col.anchor_right = 1
+	right_col.offset_top = TOP_H + 10
+	right_col.custom_minimum_size.x = RIGHT_W
+	right_col.add_theme_constant_override("separation", 6)
+	right_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(right_col)
+	_place_right_col()
+	_build_boss_bar()
 	step_lbl = _label("", "TitleLabel", 24)
-	step_lbl.anchor_left = 0.5; step_lbl.anchor_right = 0.5
-	step_lbl.offset_top = TOP_H + 70
-	step_lbl.offset_left = -200; step_lbl.offset_right = 200
-	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	step_lbl.add_theme_constant_override("outline_size", 10)
 	step_lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.03))
-	root.add_child(step_lbl)
-	_build_boss_bar()
+	step_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	right_col.add_child(step_lbl)
+	hint = PanelContainer.new()
+	hint.theme_type_variation = "TooltipPanel"
+	hint.self_modulate = Color(1, 1, 1, 0.82)   # подложка полупрозрачная, текст — чёткий
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_lbl = _label("", "", 16)
+	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint_lbl.custom_minimum_size.x = RIGHT_W - 36
+	hint.add_child(hint_lbl)
+	right_col.add_child(hint)
 	banner = _label("", "TitleLabel", 52)
 	banner.set_anchors_preset(Control.PRESET_CENTER)
 	banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -610,6 +659,7 @@ func set_shop(ids: Array, gold: int) -> void:
 		if id == null:
 			tb.texture_normal = null
 			_corner(tb, "", "", "", "", Color.WHITE)
+			_set_name(tb, "")
 			tb.disabled = true
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
@@ -618,6 +668,7 @@ func set_shop(ids: Array, gold: int) -> void:
 			var d: Dictionary = Data.HEROES[id]
 			var st: Dictionary = Rules.stats({"id": id, "star": 1})
 			_corner(tb, Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, str(d.c), str(st.atk), str(st.hp), Data.SUITS[d.s].color.lightened(0.45))
+			_set_name(tb, String(d.n))
 			tb.modulate = Color.WHITE if gold >= int(Data.HEROES[id].c) else Color(0.55, 0.5, 0.5, 1)
 
 ## Подсказка над картой магазина: какую руку она соберёт («→ Тройка»).
@@ -639,11 +690,27 @@ func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
 		if k == null:
 			tb.texture_normal = null
 			_corner(tb, "", "", "", "", Color.WHITE)
+			_set_name(tb, "")
 			tb.modulate = Color(1, 1, 1, 0)
 		else:
 			tb.texture_normal = CardFaces.magic_face(k, round_n)
 			_corner(tb, str(Data.MAGIC[k].c), "", "", "", UiTheme.GOLD)
-			tb.modulate = Color.WHITE if gold >= int(Data.MAGIC[k].c) else Color(0.55, 0.5, 0.5, 1)
+			_set_name(tb, String(Data.MAGIC[k].n))
+			tb.self_modulate = Color(1.18, 1.14, 1.22)   # тёмная фиолетовая рамка — чуть светлее
+			tb.modulate = Color.WHITE if gold >= int(Data.MAGIC[k].c) else Color(0.6, 0.55, 0.6, 1)
+
+## Имя крупно поверх ленты (на маленькой карте запечённое имя не читается).
+func _set_name(tb: TextureButton, text: String) -> void:
+	if not tb.has_node("nm"):
+		return
+	var l: Label = tb.get_node("nm")
+	l.text = text
+	var f: Font = l.get_theme_font("font")
+	var w := tb.custom_minimum_size.x - 8.0
+	var fs := 15
+	while fs > 10 and f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w:
+		fs -= 1
+	l.add_theme_font_size_override("font_size", fs)
 
 ## Подписи на карточной кнопке: ранг (tl), цена (tr), АТК (bl), ОЗ (br).
 func _corner(tb: TextureButton, tl: String, tr: String, bl: String, br: String, tl_col: Color) -> void:
@@ -661,7 +728,7 @@ func _build_zoom() -> void:
 	zoom_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	zoom_box.visible = false
 	root.add_child(zoom_box)
-	zoom = _card_button("zoom", 0, 250)
+	zoom = _card_button("zoom", 0, 300)
 	zoom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for l in zoom.get_children():
 		(l as Label).add_theme_font_size_override("font_size", 30)
@@ -702,6 +769,8 @@ func set_hand(keys: Array, round_n: int, selected := -1, battle := false) -> voi
 			tb.texture_normal = CardFaces.magic_face(keys[i], round_n)
 			_corner(tb, "", "", "", "", Color.WHITE)
 			var usable: bool = (Data.MAGIC[keys[i]].k == "spell") == battle
+			tb.self_modulate = Color(1.18, 1.14, 1.22)
+			(tb.get_node("glow") as Control).visible = usable
 			tb.modulate = Color(1.15, 1.08, 0.9) if i == selected else (Color.WHITE if usable else Color(0.6, 0.6, 0.6, 0.85))
 		else:
 			tb.visible = false
@@ -731,6 +800,13 @@ func set_hint(text: String) -> void:
 
 func set_step(text: String) -> void:
 	step_lbl.text = text
+	step_lbl.visible = text != ""
+
+## Правая колонка прижата к краю, а при открытых «Сведениях» — к боковой панели.
+func _place_right_col() -> void:
+	var r := -12.0 - ((SIDE_W + 10.0) if side and side.visible else 0.0)
+	right_col.offset_right = r
+	right_col.offset_left = r - RIGHT_W
 
 func toast(text: String, kind := "") -> void:
 	var p := PanelContainer.new()
@@ -755,9 +831,7 @@ func toast(text: String, kind := "") -> void:
 func _build_boss_bar() -> void:
 	boss_box = PanelContainer.new()
 	boss_box.theme_type_variation = "TooltipPanel"
-	boss_box.anchor_left = 0.5; boss_box.anchor_right = 0.5
-	boss_box.offset_top = TOP_H + 10
-	boss_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	boss_box.self_modulate = Color(1, 1, 1, 0.9)
 	boss_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boss_box.visible = false
 	var v := VBoxContainer.new()
@@ -766,6 +840,8 @@ func _build_boss_bar() -> void:
 	boss_name = _label("", "TitleLabel", 17)
 	boss_name.add_theme_color_override("font_color", Color("f0b48a"))
 	boss_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	boss_name.clip_text = true
+	boss_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	boss_hp_lbl = _label("", "TitleLabel", 15)
 	head.add_child(boss_name); head.add_child(boss_hp_lbl)
 	var track := ColorRect.new()
@@ -780,7 +856,7 @@ func _build_boss_bar() -> void:
 	track.add_child(boss_lag); track.add_child(boss_fill)
 	v.add_child(head); v.add_child(track)
 	boss_box.add_child(v)
-	root.add_child(boss_box)
+	right_col.add_child(boss_box)
 
 func show_boss_bar(title: String, hp: int, max_hp: int) -> void:
 	boss_box.visible = true

@@ -1034,7 +1034,7 @@ func _play_battle(b, my_tag: String, step_source: Callable = Callable()) -> void
 	for u in (b.units() if b else []):
 		if u.side != my_tag and Data.is_boss(String(u.id)):
 			_boss_slot = int(u.slot)
-			hud.show_boss_bar("%s — Страж арены" % Data.HEROES[u.id].n, int(u.hp), int(u.max_hp))
+			hud.show_boss_bar("Страж: %s" % Data.HEROES[u.id].n, int(u.hp), int(u.max_hp))
 	if _boss_slot >= 0:
 		var bc := _card_at_slot(_boss_slot)
 		if bc and not skip_battle:

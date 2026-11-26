@@ -202,9 +202,15 @@ func set_stats(atk: int, hp: int, rank := "", rank_col := Color.WHITE, star := 1
 	rank_label.modulate = rank_col
 	star_label.text = "★".repeat(star) if star > 1 else ""
 	star_label.modulate = Color("ffd45a") if star >= 3 else Color("eef3ff")
-	name_label.text = title.to_upper()
-	# подгоняем размер под ширину ленты (≈ 335 px при pixel_size 0.003)
-	name_label.font_size = clampi(int(335.0 / maxf(1.0, 0.66 * title.length())), 26, 54)
+	# подгоняем размер под ширину ленты (≈ 340 px при pixel_size 0.003); длинные имена — обычными буквами, они уже
+	var n := maxf(1.0, title.length())
+	var fs := int(340.0 / (0.66 * n))
+	if fs >= 44:
+		name_label.text = title.to_upper()
+	else:
+		name_label.text = title
+		fs = int(340.0 / (0.55 * n))
+	name_label.font_size = clampi(fs, 32, 58)
 
 ## Карта «стоит» с наклоном к камере (на столе) или лежит плашмя (в полёте/руке).
 func set_tilt(standing: bool) -> void:
