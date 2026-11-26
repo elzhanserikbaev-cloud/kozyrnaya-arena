@@ -108,7 +108,7 @@ const MONSTER_THEMES: Array = [
 ]
 const MONSTER_EVERY: int = 5
 ## Множитель статов монстров по тиру (тир = раунд / 5): индекс 1..4, дальше +MONSTER_MULT_STEP за тир.
-const MONSTER_MULT: Array = [1.0, 2.1, 1.9, 1.8, 2.4]
+const MONSTER_MULT: Array = [1.0, 2.1, 1.8, 1.85, 2.4]
 const MONSTER_MULT_STEP: float = 0.5
 const REWARD_GOLD: int = 6
 ## Цвет тира по стоимости (0 — монстр/призыв, 6 — легенда).
@@ -126,6 +126,13 @@ static func _all_heroes() -> Dictionary:
 
 static func is_legend(id: String) -> bool:
 	return LEGENDS.has(id)
+
+## Главарь отряда Стража (у него фаза ярости).
+static func is_boss(id: String) -> bool:
+	for th: Dictionary in MONSTER_THEMES:
+		if th["boss"] == id:
+			return true
+	return false
 
 static func is_monster(id: String) -> bool:
 	return MONSTERS.has(id)

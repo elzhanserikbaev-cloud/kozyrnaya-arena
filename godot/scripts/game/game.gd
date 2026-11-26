@@ -90,6 +90,12 @@ func _nettest(role: String, ip: String, args: PackedStringArray) -> void:
 			Ai.take_turn(m.p, m.round_n, "normal", rng)
 			_sync_all(false)
 			net_game.ready_for_battle()
+		elif m.phase == "result" and hud.overlay.visible and not m.pending_reward.is_empty():
+			var ch := m.choose_reward(Ai.choose_reward(m.p, m.pending_reward))
+			_log_line("REWARD round=%d %s legends=%s" % [m.round_n, String(ch.get("offer", {}).get("title", "")), JSON.stringify(Rules.all_units(m.p).filter(func(u): return Data.is_legend(u.id)).map(func(u): return [u.id, u.star]))])
+			_sync_all(false)
+			hud.show_overlay(null)
+			net_game.next_round()
 		elif m.phase == "result" and hud.overlay.visible:
 			_log_line("round=%d hp=%d streak=%d opp=%s opp_hp=%d players=%s" % [m.round_n, m.p.hp, m.p.streak, net_game.opp_name(), net_game.opp_hp(), JSON.stringify(net_game.players.map(func(p): return [p.name, p.hp]))])
 			hud.show_overlay(null)
@@ -167,6 +173,53 @@ func _monstertest(args: PackedStringArray) -> void:
 		await get_tree().create_timer(1.0).timeout
 		print("round now ", m.round_n, " legends owned: ", Rules.all_units(m.p).filter(func(u): return Data.is_legend(u.id)).map(func(u): return u.id))
 		if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_after.png"))
+	get_tree().quit()
+
+## Автотест Стража и легенды: раунд 10 (костяной дракон), на линии Ледяной дракон; ярость, приём легенды, пробуждение.
+func _bosstest(args: PackedStringArray) -> void:
+	hud.show_overlay(null)
+	m = Match.new(4242, true)
+	m.new_game("normal")
+	m.round_n = 10; m.p.level = 6; m.p.gold = 30
+	m.p.board = [Rules.new_unit("reaper", 2), Rules.new_unit("blooddemon", 2), Rules.new_unit("frostdragon", 1), Rules.new_unit("plaguelord", 2), Rules.new_unit("guildmaster", 2)]
+	for k in cards: cards[k].queue_free()
+	cards.clear()
+	_sync_all(false)
+	var shot := ""
+	for a in args:
+		if a.begins_with("--bshot="): shot = a.substr(8)
+	var boss_card: Card3D = null
+	for k in cards:
+		if cards[k].rare == "boss": boss_card = cards[k]
+	print("boss card: ", boss_card != null, " scale ", boss_card.base_scale if boss_card else 0.0, " legend rare: ", cards.values().filter(func(c): return c.rare == "legend").size())
+	print("round chip: ", hud.lbl_round.text)
+	await get_tree().create_timer(1.5).timeout
+	if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_pre.png"))
+	_ev_count.clear()
+	_fight()
+	var t0 := Time.get_ticks_msec()
+	var shot_rage := false
+	var shot_bar := false
+	while in_battle or m.phase == "battle":
+		await get_tree().process_frame
+		if not shot_bar and hud.boss_box.visible and Time.get_ticks_msec() - t0 > 4000:
+			shot_bar = true
+			if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_bar.png"))
+		if not shot_rage and int(_ev_count.get("enrage", 0)) > 0:
+			shot_rage = true
+			await get_tree().create_timer(0.5).timeout
+			if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_rage.png"))
+		if Time.get_ticks_msec() - t0 > 90000:
+			print("TIMEOUT"); break
+	await get_tree().create_timer(1.2).timeout
+	print("events: ", _ev_count)
+	print("result: ", m.last_result.get("outcome"), " awakened=", m.last_result.get("awakened"), " boss bar hidden=", not hud.boss_box.visible)
+	print("legend star now: ", Rules.all_units(m.p).filter(func(u): return Data.is_legend(u.id)).map(func(u): return [u.id, u.star]))
+	if shot != "": get_viewport().get_texture().get_image().save_png(shot)
+	hud.show_overlay(null)
+	_show_codex()
+	await get_tree().create_timer(0.6).timeout
+	if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_codex.png"))
 	get_tree().quit()
 
 ## Автотест: после боя (с «Пропустить») ни одна карта не лежит и не затемнена.
@@ -278,6 +331,7 @@ func _dev_args() -> void:
 		elif a == "--tutorial": _on_act("tutorial", null)
 		elif a == "--tuttest": _tuttest()
 		elif a == "--monstertest": _monstertest(args)
+		elif a == "--bosstest": _bosstest(args)
 		elif a == "--settings": _show_settings()
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
@@ -329,12 +383,12 @@ func _pos_for(z: String, i: int, enemy: bool) -> Vector3:
 
 ## Кого показывать на линии соперника: обычно поле ИИ (или соперника в сети), в раунд Стража — отряд Стража.
 func _enemy_board() -> Array:
-	if net_game == null and m.extras and m.is_monster_round() and m.phase in ["shop", "battle", "result"]:
+	if m.extras and m.is_monster_round() and m.phase in ["shop", "wait", "battle", "result"]:
 		return Match.monster_info(m.round_n).board
 	return m.ai.board
 
 func _enemy_name() -> String:
-	if net_game == null and m.extras and m.is_monster_round():
+	if m.extras and m.is_monster_round():
 		return String(Match.monster_info(m.round_n).title)
 	return "Соперник" if net_game == null else net_game.opp_name()
 
@@ -363,6 +417,7 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 			c = Card3D.new()
 			table.add_child(c)
 			c.setup("hero", u.id, tex, int(u.uid), w.side)
+			c.set_rare(_rare_of(u))
 			cards[k] = c
 			if animate and spawn_from != Vector3.INF and w.side == "p":
 				c.position = spawn_from
@@ -371,7 +426,9 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 				c.position = w.pos
 				if animate:
 					c.scale = Vector3.ONE * 0.2
-					c.create_tween().tween_property(c, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+					c.create_tween().tween_property(c, "scale", Vector3.ONE * c.base_scale, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+					if c.rare == "boss":
+						Sfx.play("roar")
 		else:
 			c.set_face(tex)
 			if c != drag.get("card"):
@@ -385,6 +442,25 @@ func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 		var hd: Dictionary = Data.HEROES[u.id]
 		c.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55), int(u.star), String(hd.n))
 
+## Пробуждение легенд: золотой столб над картой, звук, надпись.
+func _show_awakened(list: Array) -> void:
+	for a in list:
+		var c: Card3D = cards.get("p:%d" % int(a.uid))
+		if c == null:
+			continue
+		fx.awaken(c.global_position)
+		c.pop(1.2)
+		c.float_text("Пробуждение %s" % "★".repeat(int(a.star)), Color("ffd66a"), true)
+		Sfx.play("awaken")
+		hud.toast("Легенда пробудилась: %s %s" % [String(a.name), "★".repeat(int(a.star))], "good")
+
+func _rare_of(u: Dictionary) -> String:
+	if Data.is_legend(String(u.id)):
+		return "legend"
+	if bool(u.get("boss", false)):
+		return "boss"
+	return ""
+
 func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 	_sync_cards(animate, spawn_from)
 	_refresh_hud()
@@ -392,8 +468,20 @@ func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 func _refresh_hud() -> void:
 	var p: Dictionary = m.p
 	var foe_name: String = _enemy_name()
-	hud.set_hp(int(p.hp), int(m.ai.hp) if net_game == null else net_game.opp_hp(), foe_name)
+	var foe_hp: int = int(m.ai.hp) if net_game == null else net_game.opp_hp()
+	if m.extras and m.is_monster_round() and net_game != null:
+		foe_hp = 0
+	hud.set_hp(int(p.hp), foe_hp, foe_name)
 	hud.lbl_round.text = "Раунд %d" % m.round_n
+	if m.extras:
+		var left: int = Data.MONSTER_EVERY - m.round_n % Data.MONSTER_EVERY
+		if m.round_n % Data.MONSTER_EVERY == 0:
+			hud.lbl_round.text += " · Страж!"
+			hud.lbl_round.get_parent().tooltip_text = "%s. Победа — награда на выбор, в том числе легенда." % Match.monster_info(m.round_n).title
+		else:
+			if left <= 2:
+				hud.lbl_round.text += " · Страж через %d" % left
+			hud.lbl_round.get_parent().tooltip_text = "Следующий Страж арены — раунд %d: %s." % [m.round_n + left, Match.monster_info(m.round_n + left).name]
 	var board := Rules.board_units(p)
 	var info := Rules.team_info(board)
 	hud.set_hand_info(info.hand, Rules.unique_units(board), info.tl)
@@ -485,7 +573,7 @@ func _step_hint() -> String:
 	if hand_sel >= 0:
 		return "Выберите героя, которому отдать усиление."
 	var p: Dictionary = m.p
-	if net_game == null and m.extras and m.is_monster_round() and m.phase == "shop":
+	if m.extras and m.is_monster_round() and m.phase == "shop":
 		return "%s! Победите — выберете награду, в том числе легендарного героя. Поражение отнимет вдвое меньше ОЗ." % Match.monster_info(m.round_n).title
 	if Rules.all_units(p).is_empty():
 		return "Купите героя в магазине внизу: клик по карте."
@@ -608,6 +696,8 @@ func _on_act(name: String, arg: Variant) -> void:
 			_save_settings()
 		"rules":
 			_show_rules()
+		"codex":
+			_show_codex()
 		"side":
 			hud.toggle_side()
 		"tutorial":
@@ -940,8 +1030,18 @@ func _play_battle(b, my_tag: String, step_source: Callable = Callable()) -> void
 	var my_hand: String = Data.HANDS[b.team_hand(my_tag)].n
 	var their_hand: String = Data.HANDS[b.team_hand(Battle.other(my_tag))].n
 	hud.add_log("Раунд %d: %s против %s" % [m.round_n, my_hand, their_hand], "#f3cf73")
-	if net_game == null and m.extras and m.is_monster_round():
-		hud.show_banner(String(Match.monster_info(m.round_n).title), Color("e8b86a")); await _wait(1.4)
+	_boss_slot = -1
+	for u in (b.units() if b else []):
+		if u.side != my_tag and Data.is_boss(String(u.id)):
+			_boss_slot = int(u.slot)
+			hud.show_boss_bar("%s — Страж арены" % Data.HEROES[u.id].n, int(u.hp), int(u.max_hp))
+	if _boss_slot >= 0:
+		var bc := _card_at_slot(_boss_slot)
+		if bc and not skip_battle:
+			bc.pop(1.15)
+			fx.enrage(bc.global_position)
+		Sfx.play("roar")
+		hud.show_banner(_enemy_name(), Color("e8b86a")); await _wait(1.4)
 	if m.p.allin:
 		hud.show_banner("Вы идёте ва-банк!", Color("e06a5a")); await _wait(1.2)
 	_refresh_hud()
@@ -957,6 +1057,8 @@ func _play_battle(b, my_tag: String, step_source: Callable = Callable()) -> void
 		await _wait(0.25)
 	in_battle = false
 	targeting = false
+	_boss_slot = -1
+	hud.hide_boss_bar()
 	hud.set_battle_mode(false)
 	hud.set_step("")
 
@@ -978,9 +1080,27 @@ func _update_bars(b) -> void:
 		if c:
 			c.set_bars(int(u.hp), int(u.max_hp), int(u.mana), int(u.mm), int(u.shield))
 
+## Слот главаря Стража (у отряда Стража — линия 2), -1 — бой не со Стражем.
+var _boss_slot := -1
+var _ev_count := {}   # счётчик показанных событий боя (для автотестов)
+
+func _boss_track(b, e: Dictionary) -> void:
+	if _boss_slot < 0:
+		return
+	var u_ = e.get("tgt", e.get("u", -99))
+	if int(u_) != _boss_slot:
+		return
+	# состояние боя уже на конец хода — берём ОЗ из самого события, макс. ОЗ — из снимка
+	var bu = b.unit(_boss_slot)
+	if bu and e.has("hp"):
+		hud.set_boss_hp(int(e.hp), int(e.get("max_hp", bu.max_hp)))
+
 func _animate(evs: Array, b, my_tag: String) -> void:
 	var anim := not skip_battle
 	for e in evs:
+		_ev_count[String(e.t)] = int(_ev_count.get(String(e.t), 0)) + 1
+		if String(e.t) in ["hit", "heal", "revive", "buff"]:
+			_boss_track(b, e)
 		var c := _card_at_slot(int(e.get("u", -99)))
 		match String(e.t):
 			"step":
@@ -1010,7 +1130,30 @@ func _animate(evs: Array, b, my_tag: String) -> void:
 					c.lunge(t.position)
 					await _wait(0.16)
 			"cast":
-				if c:
+				if c and Data.is_legend(c.key):
+					c.pop(1.2)
+					c.float_text(String(e.name), Color("ffd66a"), true)
+					hud.show_banner(String(e.name), Color("f3cf73"))
+					Sfx.play("legend")
+					if anim:
+						var mine_c: bool = c.side == "p"
+						var foes: Array = []
+						var allies: Array = []
+						for u in b.units():
+							if int(u.hp) <= 0:
+								continue
+							var uc := _card_at_slot(int(u.slot))
+							if uc == null:
+								continue
+							if (uc.side == "p") == mine_c:
+								allies.append(uc.global_position)
+							else:
+								foes.append(uc.global_position)
+						var tcard := _card_at_slot(int(e.get("tgt", -99)))
+						await fx.legend_cast(c.key, c.global_position, foes, allies, tcard.global_position if tcard else Vector3.INF)
+					else:
+						await _wait(0.2)
+				elif c:
 					c.pop(1.15)
 					c.float_text(String(e.name), Color("ffe6a8"))
 					var el := Fx.elem_of_hero(c.key)
@@ -1113,6 +1256,17 @@ func _animate(evs: Array, b, my_tag: String) -> void:
 				if anim: fx.revive(pos)
 				Sfx.play("heal")
 				await _wait(0.3)
+			"enrage":
+				if c:
+					c.set_enraged(true)
+					c.pop(1.18)
+					c.float_text("ЯРОСТЬ!", Color("ff9a6a"), true)
+					hud.show_banner("%s: %s" % [Data.HEROES[c.key].n, String(e.name)], Color("ff9a6a"))
+					hud.boss_enraged("%s — %s" % [Data.HEROES[c.key].n, String(e.name)])
+					Sfx.play("roar")
+					if anim:
+						fx.enrage(c.global_position)
+					await _wait(0.8)
 			"cleanse":
 				if c:
 					c.float_text("очищен", Color("f2e6b0"))
@@ -1138,6 +1292,7 @@ func _after_battle(res: Dictionary) -> void:
 	for k in cards:
 		(cards[k] as Card3D).reset_pose()
 	_sync_cards(true)
+	_show_awakened(res.get("awakened", []))
 	var o: String = res.outcome
 	Sfx.play("win" if o == "win" else ("lose" if o == "lose" else "draw"))
 	_refresh_hud()
@@ -1162,6 +1317,8 @@ func _after_battle_net(r: Dictionary) -> void:
 	v.add_child(_ink("Соперник: %s. Вы потеряли %d ОЗ, он — %d ОЗ." % [r.opp_name, r.dmg_p, r.dmg_e], 19))
 	for n in r.get("notes", []):
 		v.add_child(_ink(String(n), 16))
+	_sync_cards(true)
+	_show_awakened(r.get("awakened", []))
 	var rows: Array = r.get("standings", []).duplicate()
 	rows.sort_custom(func(a, b): return int(a.hp) > int(b.hp))
 	for p in rows:
@@ -1169,6 +1326,13 @@ func _after_battle_net(r: Dictionary) -> void:
 	if not bool(r.alive):
 		v.add_child(_ink("Вы выбыли. Место: %d. Можно досмотреть игру или выйти в меню." % int(r.place), 18))
 		v.add_child(_button("Выйти в меню", "net_leave", null, "GoldButton"))
+	elif not m.pending_reward.is_empty():
+		v.add_child(_ink("Выберите награду" if m.reward_source == "monster" else "Награда за серию побед — выберите одну", 24, "TitleLabel"))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		for i in m.pending_reward.size():
+			row.add_child(_reward_card(i, m.pending_reward[i]))
+		v.add_child(row)
 	else:
 		v.add_child(_button("Следующий раунд", "net_next", null, "GoldButton"))
 	hud.show_overlay(v, false)
@@ -1347,7 +1511,7 @@ func _show_start() -> void:
 	v.add_child(nets)
 	var misc := HBoxContainer.new()
 	misc.add_theme_constant_override("separation", 10)
-	for spec in [["Как играть", "rules"], ["Обучение", "tutorial"], ["Настройки", "settings"]]:
+	for spec in [["Как играть", "rules"], ["Легенды и Стражи", "codex"], ["Обучение", "tutorial"], ["Настройки", "settings"]]:
 		var mb := _button(spec[0], spec[1])
 		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		misc.add_child(mb)
@@ -1367,6 +1531,10 @@ const RULES_TEXT := """Магазин. Каждый раунд приносит 
 Камбэк. Ва-банк — когда вы отстаёте: победа отнимает у соперника вдвое больше, поражение — у вас в 1,5 раза больше. Раз в 3 раунда. Награда за голову: прервите серию из 3+ побед и получите золото и карту магии. За обычное поражение — не больше 18 ОЗ. После поражения первое обновление магазина бесплатно, а витрина чаще подбрасывает нужные карты.
 
 Бой идёт сам. Урон после поражения зависит от раунда и выживших врагов. У каждого 100 ОЗ: кто остался последним — забирает банк.
+
+Стражи арены. Каждый 5-й раунд вместо соперника выходит Страж со свитой. Когда у главаря остаётся меньше половины ОЗ, он впадает в ярость: голем закрывает отряд каменной кожей, костяной дракон поднимает павших слуг, Владыка бездны распаляется и сразу бьёт. Победа — награда на выбор, поражение отнимает вдвое меньше ОЗ.
+
+Легенды. Пять уникальных героев в золотых рамках — только в награду за Стража. На линии может стоять одна легенда. Каждая победа над Стражем, в которой легенда сражалась, пробуждает её: ★ → ★★ → ★★★. Все легенды и Стражи — в меню «Легенды и Стражи».
 
 Иконки героев и магии: game-icons.net (CC BY 3.0). Шрифты: Philosopher, Rubik (OFL). Музыка написана для игры."""
 
@@ -1426,6 +1594,58 @@ func _show_settings() -> void:
 	v.add_child(_button("Крупный интерфейс (телефон, планшет): %s" % ("вкл." if settings.big_ui else "выкл."), "toggle_big", null, "BlueButton" if settings.big_ui else ""))
 	v.add_child(_button("Готово", "menu", null, "GoldButton"))
 	hud.show_overlay(v)
+
+## Справочник: все легенды (способности по ★) и Стражи арены (раунды, свита, ярость).
+func _show_codex() -> void:
+	var v := _vbox(10)
+	v.add_child(_ink("Легенды и Стражи", 34, "TitleLabel"))
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(820, 540)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list := _vbox(12)
+	sc.add_child(list)
+	list.add_child(_ink("ЛЕГЕНДЫ — награда за победу над Стражем. На линии — одна. Пробуждаются (+★) после каждой победы над Стражем, в которой сражались.", 16, "MutedLabel"))
+	for id in Data.LEGENDS:
+		var d: Dictionary = Data.HEROES[id]
+		var rank: String = "Джокер в покерной руке" if d.has("wild") else "%s%s" % [Rules.rank_label(int(d.r)), Data.SUITS[d.s].sym]
+		var body := "%s · %s · ОЗ %d · АТК %d\n%s: %s\n★★★: %s" % [rank, Data.SUITS[d.s].name, int(d.hp), int(d.atk), d.ab.n, Data.ab_desc(id, 1), Data.ab_desc(id, 3)]
+		list.add_child(_codex_row(CardFaces.face(id, 1), String(d.n), body, Color("b8862a")))
+	list.add_child(HSeparator.new())
+	list.add_child(_ink("СТРАЖИ АРЕНЫ — каждый 5-й раунд. Сила растёт с каждым кругом, свита — от 2 до 4 слуг.", 16, "MutedLabel"))
+	var rage := {"m_golem": "Каменная кожа: весь отряд получает щит (14% ОЗ голема).",
+		"m_bonedragon": "Восставшие кости: павшие слуги встают с 40% ОЗ, а если никто не пал — отряд злеет (+25% АТК).",
+		"m_abyss": "Пламя ярости: +40% АТК и полная мана — «Пламя бездны» сразу следующим ходом."}
+	for ti in Data.MONSTER_THEMES.size():
+		var th: Dictionary = Data.MONSTER_THEMES[ti]
+		var bd: Dictionary = Data.HEROES[th.boss]
+		var rounds: Array = []
+		for k in 3:
+			rounds.append(str((ti + 1 + k * Data.MONSTER_THEMES.size()) * Data.MONSTER_EVERY))
+		var minions: Array = (th.minions as Array).map(func(x): return String(Data.HEROES[x].n))
+		var body := "Раунды %s… · свита: %s\n%s: %s\nЯрость (меньше половины ОЗ) — %s" % [", ".join(rounds), ", ".join(minions), bd.ab.n, Data.ab_desc(th.boss, 1), rage.get(th.boss, "")]
+		list.add_child(_codex_row(CardFaces.face(th.boss, 1), String(th.name), body, Color("7a2e22")))
+	v.add_child(sc)
+	v.add_child(_button("Назад", "menu" if not in_battle and m.round_n <= 1 and m.phase == "shop" and Rules.all_units(m.p).is_empty() else "close", null, "GoldButton"))
+	hud.show_overlay(v)
+
+func _codex_row(tex: Texture2D, title: String, body: String, col: Color) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 16)
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.custom_minimum_size = Vector2(112, 157)
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var vb := _vbox(4)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var t := _ink(title, 22, "TitleLabel")
+	t.add_theme_color_override("font_color", col)
+	t.custom_minimum_size.x = 600
+	var b := _ink(body, 15)
+	b.custom_minimum_size.x = 600
+	vb.add_child(t); vb.add_child(b)
+	h.add_child(tr); h.add_child(vb)
+	return h
 
 func _show_rules() -> void:
 	var v := _vbox(12)

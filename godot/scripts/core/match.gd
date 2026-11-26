@@ -462,6 +462,8 @@ static func monster_info(r: int) -> Dictionary:
 		if extra_hp > 0 or extra_atk > 0:
 			fed = {"atk": extra_atk, "hp": extra_hp, "n": 0}
 		board[lanes[i]] = {"uid": 90001 + int(lanes[i]), "id": id, "star": star, "items": [], "fed": fed}
+		if i == 0:
+			board[lanes[i]]["boss"] = true
 	return {"name": th["name"], "title": "Страж арены: %s" % th["name"], "theme": th["key"], "tier": tier, "board": board}
 
 ## Множитель статов монстров по тиру (Data.MONSTER_MULT, дальше +MONSTER_MULT_STEP за тир).
@@ -521,10 +523,16 @@ func _finish_monster_battle(result: Dictionary) -> Dictionary:
 	var dmg_e: int = 0 if ai_out == "win" else monster_damage(round_n, ai_monster_result)
 	p["hp"] = maxi(0, int(p["hp"]) - dmg_p)
 	ai["hp"] = maxi(0, int(ai["hp"]) - dmg_e)
+	var awakened: Array = []
 	if outcome == "win":
 		notes.append("%s повержен! Выберите награду." % monster["name"])
+		awakened = awaken_legends(p)
+		for a: Dictionary in awakened:
+			notes.append("Легенда пробудилась: %s %s" % [a["name"], "★".repeat(int(a["star"]))])
 	else:
 		notes.append("%s устоял: вы теряете %d ОЗ (половину урона раунда)." % [monster["name"], dmg_p])
+	if ai_out == "win":
+		awaken_legends(ai)
 	notes.append("Соперник тоже одолел своего Стража." if ai_out == "win" else ("Соперник не справился со Стражем: −%d ОЗ." % dmg_e))
 	var over: String = ""
 	if int(p["hp"]) <= 0 or int(ai["hp"]) <= 0:
@@ -538,8 +546,19 @@ func _finish_monster_battle(result: Dictionary) -> Dictionary:
 		if outcome == "win":
 			_offer_player(_gen_offers(p, true), "monster")
 	last_result = {"outcome": outcome, "dmg_p": dmg_p, "dmg_e": dmg_e, "over": over, "notes": notes, "bounty_card": "", "round": round_n,
-		"monster": true, "monster_name": monster["name"], "ai_monster": ai_out, "ai_reward": ai_reward, "reward": pending_reward.size() > 0}
+		"monster": true, "monster_name": monster["name"], "ai_monster": ai_out, "ai_reward": ai_reward, "reward": pending_reward.size() > 0,
+		"awakened": awakened}
 	return last_result
+
+## Пробуждение легенд: каждая легенда, что стояла на линии в победном бою со Стражем, получает +1 ★ (до ★★★).
+## Легенды не сливаются (копия у стороны одна), так они растут вместе с партией. [{uid, id, name, star}]
+static func awaken_legends(side: Dictionary) -> Array:
+	var out: Array = []
+	for u: Variant in side["board"]:
+		if u != null and Rules.is_legend(u) and int(u["star"]) < 3:
+			u["star"] = int(u["star"]) + 1
+			out.append({"uid": int(u["uid"]), "id": str(u["id"]), "name": str(D.HEROES[u["id"]]["n"]), "star": int(u["star"])})
+	return out
 
 # ---------- награды (дополнения) ----------
 

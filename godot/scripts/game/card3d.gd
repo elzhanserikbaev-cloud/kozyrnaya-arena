@@ -36,6 +36,10 @@ var hp_label_face: Label3D
 var rank_label: Label3D
 var star_label: Label3D
 var name_label: Label3D
+var base_scale := 1.0          # Страж крупнее остальных карт
+var rare := ""                 # "" | "legend" | "boss"
+var _rim: MeshInstance3D       # окантовка легенды/Стража (матовая, не светится)
+var _aura: CPUParticles3D      # редкие медленные искры вокруг карты
 
 static var _quad: QuadMesh
 
@@ -115,6 +119,68 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	name_label.outline_size = 18
 	set_tilt(true)
 	return self
+
+## Особая карта: легенда — золотая окантовка и редкие золотые искры; Страж — крупнее, тёмная бронза и тлеющие угли.
+func set_rare(kind: String) -> void:
+	if kind == rare:
+		return
+	rare = kind
+	if _rim:
+		_rim.queue_free(); _rim = null
+	if _aura:
+		_aura.queue_free(); _aura = null
+	base_scale = 1.22 if kind == "boss" else 1.0
+	scale = Vector3.ONE * base_scale
+	if kind == "":
+		return
+	_rim = MeshInstance3D.new()
+	var q := QuadMesh.new(); q.size = Vector2(W + 0.16, H + 0.16)
+	_rim.mesh = q
+	var rm := StandardMaterial3D.new()
+	rm.albedo_color = Color("c99632") if kind == "legend" else Color("5a2a22")
+	rm.metallic = 0.55 if kind == "legend" else 0.35
+	rm.roughness = 0.4 if kind == "legend" else 0.6
+	_rim.material_override = rm
+	_rim.position.z = -0.01
+	pivot.add_child(_rim)
+	_aura = CPUParticles3D.new()
+	_aura.amount = 10 if kind == "legend" else 14
+	_aura.lifetime = 2.6 if kind == "legend" else 2.0
+	_aura.preprocess = 2.0
+	_aura.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_aura.emission_box_extents = Vector3(W * 0.55, 0.05, 0.25)
+	_aura.direction = Vector3.UP
+	_aura.spread = 12.0
+	_aura.gravity = Vector3.ZERO
+	_aura.initial_velocity_min = 0.25
+	_aura.initial_velocity_max = 0.5
+	_aura.scale_amount_min = 0.5
+	_aura.scale_amount_max = 1.0
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 0)); curve.add_point(Vector2(0.25, 1)); curve.add_point(Vector2(1, 0))
+	_aura.scale_amount_curve = curve
+	var pm := QuadMesh.new(); pm.size = Vector2(0.07, 0.07)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	var tex: Texture2D = load("res://assets/fx/soft.png") if ResourceLoader.exists("res://assets/fx/soft.png") else null
+	if tex:
+		mat.albedo_texture = tex
+	pm.material = mat
+	_aura.mesh = pm
+	_aura.color = Color(1.0, 0.84, 0.45, 0.8) if kind == "legend" else Color(0.95, 0.42, 0.2, 0.75)
+	_aura.position = Vector3(0, 0.1, 0)
+	add_child(_aura)
+
+## Ярость Стража: лицо слегка краснеет, окантовка темнеет до угля.
+func set_enraged(on: bool) -> void:
+	_face_mat.albedo_color = Color(1.0, 0.8, 0.76) if on else Color.WHITE
+	if _rim:
+		(_rim.material_override as StandardMaterial3D).albedo_color = Color("8a2a1c") if on else (Color("c99632") if rare == "legend" else Color("5a2a22"))
+	if _aura:
+		_aura.amount = 28 if on else 14
 
 ## Крупные цифры АТК/ОЗ поверх медальонов (чтобы читались на столе).
 func _stat_label(px: Vector2, col: Color) -> Label3D:
@@ -263,12 +329,14 @@ func reset_pose() -> void:
 		if is_instance_valid(t):
 			t.kill()
 	_pose_tws.clear()
-	scale = Vector3.ONE
+	scale = Vector3.ONE * base_scale
 	if home_pos != Vector3.INF:
 		position = home_pos
 	set_tilt(true)
 	set_dim(1.0)
 	show_bars(false)
+	if rare != "":
+		set_enraged(false)
 
 func shake(strength := 0.08) -> void:
 	var home := pivot.position
@@ -279,8 +347,8 @@ func shake(strength := 0.08) -> void:
 
 func pop(scale_to := 1.12) -> void:
 	var tw := _track(create_tween())
-	tw.tween_property(self, "scale", Vector3.ONE * scale_to, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(self, "scale", Vector3.ONE, 0.18)
+	tw.tween_property(self, "scale", Vector3.ONE * scale_to * base_scale, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "scale", Vector3.ONE * base_scale, 0.18)
 
 func die() -> Tween:
 	var tw := _track(create_tween().set_parallel(true))

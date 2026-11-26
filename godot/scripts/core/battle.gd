@@ -122,6 +122,8 @@ func _build_team(board: Array, tag: String) -> Array:
 		}
 		if d["ab"]["t"] == "phoenix":
 			out[lane]["rebirth"] = 1
+		if bool(u.get("boss", false)):
+			out[lane]["boss"] = 1   # Страж: ярость при падении ниже половины ОЗ
 	return out
 
 # ---------- запросы ----------
@@ -379,6 +381,9 @@ func _hit(src: Variant, t: Variant, amt: float, can_crit: bool, kind: String) ->
 		if int(t.get("rebirth", 0)) > 0:   # Феникс: восстаёт из пепла один раз
 			t["rebirth"] = 0
 			_revive(t, 0.5, "rebirth")
+	elif int(t.get("boss", 0)) == 1 and int(t["hp"]) * 2 < int(t["max_hp"]):
+		t["boss"] = 2
+		_enrage(t)
 	if src != null and src["alive"] and float(src["lifesteal"]) > 0.0:
 		_heal(src, a * float(src["lifesteal"]), "lifesteal")
 	if src != null and src["alive"] and float(t["thorns"]) > 0.0:
@@ -522,6 +527,33 @@ func _cast(c: Dictionary, t: Dictionary, allies: Array, foes: Array) -> void:
 				_hit(c, x, P, true, "ability")
 				if x["alive"] and rng.next() < 0.5:
 					_stun(x, maxi(int(x["stun"]), 1), "ability")
+
+## Ярость Стража: один раз за бой, когда ОЗ босса впервые падает ниже половины. Без случайности.
+##   Каменный голем — «Каменная кожа»: щит 14% макс. ОЗ голема всему отряду.
+##   Костяной дракон — «Восставшие кости»: павшие слуги встают с 40% ОЗ; если никто не пал — +25% АТК отряду.
+##   Владыка бездны — «Пламя ярости»: +40% АТК себе и полная мана (способность — следующим ходом).
+func _enrage(c: Dictionary) -> void:
+	var allies: Array = teams[c["side"]]
+	var names: Dictionary = {"m_golem": "Каменная кожа", "m_bonedragon": "Восставшие кости", "m_abyss": "Пламя ярости"}
+	var key: String = str(c["id"])
+	_emit({"t": "enrage", "u": c["slot"], "name": str(names.get(key, "Ярость Стража"))})
+	match key:
+		"m_golem":
+			for x: Dictionary in _live(allies):
+				_add_shield(x, float(c["max_hp"]) * 0.14, "ability")
+		"m_bonedragon":
+			var raised: bool = false
+			for x: Variant in allies:
+				if x != null and not x["alive"] and x != c and not x.get("summoned", false):
+					_revive(x, 0.4, "ability")
+					raised = true
+			if not raised:
+				for x: Dictionary in _live(allies):
+					_buff_atk(x, D.r(float(x["atk"]) + float(x["base_atk"]) * 0.25), 25, "ability")
+		_:
+			_buff_atk(c, D.r(float(c["atk"]) + float(c["base_atk"]) * 0.4), 40, "ability")
+			c["mana"] = int(c["mm"])
+			_emit({"t": "mana", "u": c["slot"], "mana": c["mana"], "kind": "enrage"})
 
 ## Ближайшая к lane пустая линия (null), иначе линия павшего бойца; -1 — мест нет.
 func _free_lane(team: Array, lane: int) -> int:

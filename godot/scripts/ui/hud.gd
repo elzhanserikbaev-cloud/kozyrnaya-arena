@@ -60,6 +60,12 @@ var toasts: VBoxContainer
 var overlay: Control
 var overlay_panel: PanelContainer
 var banner: Label
+var boss_box: PanelContainer
+var boss_name: Label
+var boss_fill: ColorRect
+var boss_lag: ColorRect
+var boss_hp_lbl: Label
+var _boss_w := 420.0
 var step_lbl: Label
 
 func _ready() -> void:
@@ -448,6 +454,7 @@ func _build_misc() -> void:
 	step_lbl.add_theme_constant_override("outline_size", 10)
 	step_lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.03))
 	root.add_child(step_lbl)
+	_build_boss_bar()
 	banner = _label("", "TitleLabel", 52)
 	banner.set_anchors_preset(Control.PRESET_CENTER)
 	banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -719,7 +726,7 @@ func set_battle_mode(on: bool, speed := 2) -> void:
 		b.theme_type_variation = "GoldButton" if s == speed else ""
 
 func set_hint(text: String) -> void:
-	hint.visible = text != ""
+	hint.visible = text != "" and not boss_box.visible
 	hint_lbl.text = text
 
 func set_step(text: String) -> void:
@@ -743,6 +750,61 @@ func toast(text: String, kind := "") -> void:
 	tw.tween_callback(p.queue_free)
 	while toasts.get_child_count() > 4:
 		toasts.get_child(0).free()
+
+## Полоса здоровья Стража над столом (только в бою со Стражем).
+func _build_boss_bar() -> void:
+	boss_box = PanelContainer.new()
+	boss_box.theme_type_variation = "TooltipPanel"
+	boss_box.anchor_left = 0.5; boss_box.anchor_right = 0.5
+	boss_box.offset_top = TOP_H + 10
+	boss_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	boss_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_box.visible = false
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	var head := HBoxContainer.new()
+	boss_name = _label("", "TitleLabel", 17)
+	boss_name.add_theme_color_override("font_color", Color("f0b48a"))
+	boss_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	boss_hp_lbl = _label("", "TitleLabel", 15)
+	head.add_child(boss_name); head.add_child(boss_hp_lbl)
+	var track := ColorRect.new()
+	track.color = Color(0.08, 0.05, 0.04, 0.9)
+	track.custom_minimum_size = Vector2(_boss_w, 14)
+	boss_lag = ColorRect.new()
+	boss_lag.color = Color("d8b070")
+	boss_lag.size = Vector2(_boss_w, 14)
+	boss_fill = ColorRect.new()
+	boss_fill.color = Color("a8382a")
+	boss_fill.size = Vector2(_boss_w, 14)
+	track.add_child(boss_lag); track.add_child(boss_fill)
+	v.add_child(head); v.add_child(track)
+	boss_box.add_child(v)
+	root.add_child(boss_box)
+
+func show_boss_bar(title: String, hp: int, max_hp: int) -> void:
+	boss_box.visible = true
+	hint.visible = false
+	boss_name.text = title
+	boss_fill.color = Color("a8382a")
+	set_boss_hp(hp, max_hp, false)
+
+func set_boss_hp(hp: int, max_hp: int, animate := true) -> void:
+	var r := clampf(float(hp) / maxf(1.0, float(max_hp)), 0.0, 1.0)
+	boss_fill.size.x = _boss_w * r
+	boss_hp_lbl.text = "%d / %d" % [maxi(0, hp), max_hp]
+	if animate:
+		boss_lag.create_tween().tween_property(boss_lag, "size:x", _boss_w * r, 0.5).set_delay(0.15)
+	else:
+		boss_lag.size.x = _boss_w * r
+
+func boss_enraged(text: String) -> void:
+	boss_name.text = text
+	boss_fill.color = Color("d2552e")
+
+func hide_boss_bar() -> void:
+	boss_box.visible = false
+	hint.visible = hint_lbl.text != ""
 
 func show_banner(text: String, col := Color("f3cf73")) -> void:
 	banner.text = text

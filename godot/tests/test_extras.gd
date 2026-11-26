@@ -25,6 +25,8 @@ func _init() -> void:
 	test_monster_rounds()
 	test_rewards()
 	test_monster_damage()
+	test_boss_enrage()
+	test_awaken()
 	test_ai_rewards()
 	test_save_load()
 	test_determinism()
@@ -263,6 +265,51 @@ func test_jest() -> void:
 			if e["t"] == "stun" and e["kind"] == "ability":
 				stuns += 1
 	ok(stuns > 30 and stuns < 90, "оглушение примерно в половине ударов (%d из 120)" % stuns)
+
+func test_boss_enrage() -> void:
+	section("ярость Стража")
+	for r: int in [5, 10, 15]:
+		var mi: Dictionary = Match.monster_info(r)
+		ok(bool(mi["board"][2].get("boss", false)) and not bool(mi["board"][1].get("boss", false)), "босс помечен только у главаря (раунд %d)" % r)
+		var seen: int = 0
+		var fired: int = 0
+		for sd in 12:
+			var mine: Array = [Rules.new_unit("reaper", 3), Rules.new_unit("blooddemon", 3), Rules.new_unit("tyrant", 3), Rules.new_unit("plaguelord", 3), Rules.new_unit("guildmaster", 3)]
+			var b: Battle = Battle.new(mine, (mi["board"] as Array).duplicate(true), {"name": "p"}, {"name": "m", "monster": true}, 1000 + sd, r)
+			var evs: Array = b.run_to_end()
+			var n: int = evs.filter(func(e: Dictionary) -> bool: return e["t"] == "enrage").size()
+			ok(n <= 1, "ярость не больше раза за бой")
+			fired += n
+			seen += 1
+			if n == 1:
+				var e: Dictionary = evs.filter(func(e: Dictionary) -> bool: return e["t"] == "enrage")[0]
+				ok(e["u"] == Battle.slot_of("away", 2) and str(e["name"]) != "", "ярость у главаря, с названием")
+		ok(fired > 0, "%s впадает в ярость (%d из %d боёв)" % [mi["name"], fired, seen])
+
+func test_awaken() -> void:
+	section("пробуждение легенд")
+	var m: Match = _monster_match(71)
+	m.round_n = 5
+	m.p["board"][0] = Rules.new_unit("phoenix", 1)
+	m.p["bench"][0] = Rules.new_unit("archangel", 1)
+	m.phase = "battle"
+	m.monster = Match.monster_info(5)
+	m.ai_monster_result = {"outcome": "away", "survivors_home": [], "survivors_away": []}
+	var r: Dictionary = m.finish_battle({"outcome": "home", "survivors_home": [], "survivors_away": []})
+	eq(int(m.p["board"][0]["star"]), 2, "легенда на линии: ★ → ★★")
+	eq(int(m.p["bench"][0]["star"]), 1, "легенда на скамье не растёт")
+	eq((r["awakened"] as Array).size(), 1, "итог сообщает о пробуждении")
+	ok(not (r["notes"] as Array).any(func(n: String) -> bool: return n.contains("устоял")), "после победы нет строки о поражении")
+	var side: Dictionary = {"board": [Rules.new_unit("frostdragon", 3), null, null, null, null]}
+	ok(Match.awaken_legends(side).is_empty() and int(side["board"][0]["star"]) == 3, "выше ★★★ не растёт")
+	var lose: Match = _monster_match(72)
+	lose.round_n = 5
+	lose.p["board"][0] = Rules.new_unit("phoenix", 1)
+	lose.phase = "battle"
+	lose.monster = Match.monster_info(5)
+	lose.ai_monster_result = {"outcome": "away", "survivors_home": [], "survivors_away": []}
+	lose.finish_battle({"outcome": "away", "survivors_home": [], "survivors_away": []})
+	eq(int(lose.p["board"][0]["star"]), 1, "после поражения не растёт")
 
 func _monster_match(seed_value: int) -> Match:
 	var m: Match = Match.new(seed_value, true)

@@ -5,7 +5,7 @@ extends Node
 ## Раунд: все закупаются → «В бой!» шлёт ведущему снимок поля → ведущий ставит пары и шагает бои,
 ## дожидаясь, пока оба участника досмотрят ход (ack) → итог раунда каждому → следующий раунд.
 
-const PROTO := 1
+const PROTO := 2   # 2: Стражи арены, легенды и награды в сетевой игре
 const MAX_PLAYERS := 8
 const ACK_TIMEOUT := 8.0
 const SUBMIT_TIMEOUT := 120.0
@@ -30,6 +30,7 @@ var _battles: Array = []            # [{b, home, away, ghost_of, acks:{}, t, don
 var _submit_deadline := 0.0
 var _resolving := false
 var h_round := 1                    # номер раунда у ведущего (для боёв и урона)
+var _rm: Match = null               # помощник ведущего: офферы наград ботам (только _gen_offers/_apply_offer)
 
 func setup(g: Node) -> void:
 	game = g
@@ -358,7 +359,7 @@ func _c_start() -> void:
 	for k in game.cards:
 		game.cards[k].queue_free()
 	game.cards.clear()
-	var m := Match.new(-1, false)   # легенды и Стражи пока только в одиночной игре
+	var m := Match.new(-1, true)   # Стражи, легенды и награды — как в одиночной игре
 	m.new_game("normal")
 	m.p.name = _nm()
 	game.m = m
@@ -472,6 +473,15 @@ func _c_round_result(r: Dictionary) -> void:
 		m.p.allin_cd = round_n + 3
 	opp.hp = int(r.get("opp_hp", opp.get("hp", 0)))
 	m.phase = "result"
+	if m.extras and bool(r.alive) and int(r.hp) > 0:
+		if bool(r.get("monster", false)) and r.outcome == "win":
+			r.awakened = Match.awaken_legends(m.p)
+			for a in r.awakened:
+				(r.notes as Array).append("Легенда пробудилась: %s %s" % [String(a.name), "★".repeat(int(a.star))])
+			m._offer_player(m._gen_offers(m.p, true), "monster")
+		elif not bool(r.get("monster", false)) and r.outcome == "win" and int(r.streak) in [3, 5]:
+			(r.notes as Array).append("Серия из %d побед: выберите награду." % int(r.streak))
+			m._offer_player(m._gen_offers(m.p, false), "streak")
 	if rb:
 		rb.force_end()
 	rb = null
@@ -558,6 +568,9 @@ func _start_round_battles() -> void:
 			if H[id].bot:
 				_bot_turn(H[id])
 			alive.append(id)
+	if h_round % Data.MONSTER_EVERY == 0:
+		_start_monster_battles(alive)
+		return
 	# перемешиваем и ставим пары; нечётному достаётся «призрак» — копия поля случайного соперника
 	for i in range(alive.size() - 1, 0, -1):
 		var j := _rng.next_int(i + 1)
@@ -596,6 +609,57 @@ func _start_round_battles() -> void:
 		_reset_acks(bt)
 		for id in bt.acks:
 			bt.acks[id] = true   # первый ход — сразу
+
+## Раунд Стража: каждый живой игрок (и бот) — против одного и того же отряда Стража. Ва-банка нет.
+func _start_monster_battles(alive: Array) -> void:
+	var mi: Dictionary = Match.monster_info(h_round)
+	_battles.clear()
+	for id in alive:
+		var p: Dictionary = H[id]
+		p.snap.allin = false
+		var b := Battle.new(p.snap.board, (mi.board as Array).duplicate(true),
+			{"name": p.name, "ai": p.bot, "hand": p.snap.spells if p.bot else [], "allin": false},
+			{"name": mi.title, "ai": false, "hand": [], "monster": true}, _rng.next_seed(), h_round)
+		var bt := {"b": b, "home": id, "away": 0, "ghost": true, "monster": true, "acks": {}, "t": 0.0, "done": false, "step": 0}
+		_battles.append(bt)
+		if not p.bot:
+			_to_peer(int(id), "battle_begin", [{"tag": "home", "units": b.units(), "ghost": false, "monster": true,
+				"hands": {"home": b.team_hand("home"), "away": b.team_hand("away")},
+				"opp": {"id": 0, "name": mi.title, "hp": 0, "streak": 0, "board": mi.board, "allin": false}}])
+		_reset_acks(bt)
+		for k in bt.acks:
+			bt.acks[k] = true
+
+## Итог боя со Стражем: победа — без потерь (награду выбирает сам игрок у себя), иначе половина урона раунда.
+## Серия побед при этом не меняется — как в одиночной игре.
+func _apply_monster(bt: Dictionary, res: Dictionary, results: Dictionary) -> void:
+	var me: Dictionary = H[bt.home]
+	var mi: Dictionary = Match.monster_info(h_round)
+	var o: String = res.outcome
+	var outcome := "win" if o == "home" else ("lose" if o == "away" else "draw")
+	var dmg := 0 if outcome == "win" else Match.monster_damage(h_round, res)
+	me.hp = maxi(0, int(me.hp) - dmg)
+	var notes: Array = []
+	if outcome == "win":
+		notes.append("%s повержен! Выберите награду." % mi.name)
+		if me.bot:
+			Match.awaken_legends(me.side)
+			_bot_reward(me, true)
+	else:
+		notes.append("%s устоял: вы теряете %d ОЗ (половину урона раунда)." % [mi.name, dmg])
+	if me.bot:
+		me.side.hp = me.hp
+	results[me.id] = {"outcome": outcome, "dmg_p": dmg, "dmg_e": 0, "notes": notes, "gold": 0, "card": "",
+		"opp_name": mi.title, "opp_id": 0, "monster": true, "monster_name": mi.name}
+
+## Награда боту: те же три оффера, что у игрока; бот выбирает как ИИ одиночной игры.
+func _bot_reward(me: Dictionary, from_monster: bool) -> void:
+	if _rm == null:
+		_rm = Match.new(_rng.next_seed(), true)
+	var offers: Array = _rm._gen_offers(me.side, from_monster)
+	if offers.is_empty():
+		return
+	_rm._apply_offer(me.side, offers[Ai.choose_reward(me.side, offers)])
 
 func _humans_in(bt: Dictionary) -> Array:
 	var out: Array = []
@@ -689,6 +753,9 @@ func _resolve_round() -> void:
 		H[id].pre_streak = int(H[id].streak)
 	for bt in _battles:
 		var res: Dictionary = bt.b.result()
+		if bt.get("monster", false):
+			_apply_monster(bt, res, results)
+			continue
 		var home: Dictionary = H[bt.home]
 		var away: Dictionary = H[bt.away]
 		var ghost: bool = bt.ghost
@@ -779,5 +846,7 @@ func _apply(me: Dictionary, them: Dictionary, outcome: String, dmg_me: int, dmg_
 	if me.bot:
 		me.side.hp = me.hp
 		me.side.streak = me.streak
+		if outcome == "win" and int(me.streak) in [3, 5]:
+			_bot_reward(me, false)
 	results[me.id] = {"outcome": outcome, "dmg_p": dmg_me, "dmg_e": dmg_them, "notes": notes, "gold": gold, "card": card,
 		"opp_name": them.name, "opp_id": them.id}

@@ -310,6 +310,59 @@ func spell(key: String, targets: Array, side_center: Vector3) -> Signal:
 				cast(t, el)
 	return get_tree().create_timer(t_hit / time_scale).timeout
 
+## Ярость Стража: угли и пепел вокруг, тёмное кольцо по столу, встряска камеры.
+func enrage(at: Vector3) -> void:
+	var c: Array = _pal("H")
+	var g := Vector3(at.x, 0.04, at.z)
+	_sprite(g, "ring", 1.0, 5.0, Color("7a2418"), 0.9, {"flat": true, "alpha": 0.5, "a_in": 0.1})
+	_sprite(g, "rune", 2.6, 3.2, Color("a8382a"), 1.2, {"flat": true, "alpha": 0.55, "spin": -1.6, "a_in": 0.2})
+	_burst(_front(at, 0.2, PUSH), {"tex": "dot", "n": 34, "life": 1.2, "expl": 0.5, "r": 0.8, "dir": Vector3.UP, "spread": 25.0,
+		"vel": [1.2, 2.6], "grav": Vector3(0, 0.6, 0), "size": [0.06, 0.12], "cols": [c[0], c[1]], "alpha": 0.95})
+	_burst(_front(at, 0.4, PUSH), {"tex": "puff", "n": 10, "life": 1.3, "ring": [1.0, 0.7], "dir": Vector3.UP, "spread": 50.0,
+		"vel": [0.5, 1.0], "size": [0.5, 0.9], "cols": [Color("3a2a26"), Color("1e1614")], "alpha": 0.45})
+	camera_shake(null, 0.09, 0.4)
+
+## Пробуждение легенды: столб золотого света, звёзды, руна.
+func awaken(at: Vector3) -> void:
+	revive(at)
+	var c: Array = _pal("D")
+	_burst(_front(at, 1.0, PUSH), {"tex": "star", "n": 16, "life": 1.3, "expl": 0.6, "r": 0.7, "dir": Vector3.UP,
+		"spread": 30.0, "vel": [0.6, 1.4], "size": [0.12, 0.22], "cols": [Color.WHITE, c[0]], "alpha": 0.9})
+	_sprite(Vector3(at.x, 0.035, at.z), "ring", 0.6, 4.0, c[1], 1.1, {"flat": true, "alpha": 0.45})
+
+## Приём легенды: свой рисунок поверх обычных попаданий.
+##   frostdragon — ледяная волна по всем врагам; phoenix — огненный шар по цели; archangel — золотые щиты союзникам;
+##   ancientent — листопад по союзникам; madjester — три вспышки-звезды.
+func legend_cast(id: String, from: Vector3, foes: Array, allies: Array, target: Vector3) -> Signal:
+	var g := Vector3(from.x, 0.035, from.z)
+	_sprite(g, "rune", 2.0, 3.4, _pal(Data.HEROES[id].s if Data.HEROES.has(id) else "")[1], 1.1, {"flat": true, "alpha": 0.7, "spin": 1.8, "a_in": 0.2})
+	match id:
+		"frostdragon":
+			var i := 0
+			for t: Vector3 in foes:
+				_later(i * 0.06, func(): projectile(from, t, "S", 0.3))
+				i += 1
+			_later(0.3, func(): spell("freeze", foes, from))
+			camera_shake(null, 0.05, 0.25)
+			return get_tree().create_timer((0.35 + 0.06 * foes.size()) / time_scale).timeout
+		"phoenix":
+			if target != Vector3.INF:
+				projectile(from, target, "H", 0.38)
+				_later(0.38, func():
+					hit(target, "H", true, "spell")
+					_burst(_front(target, 0.3, PUSH), {"tex": "soft", "n": 24, "life": 1.0, "ring": [1.2, 0.8], "dir": Vector3.UP,
+						"spread": 30.0, "vel": [0.8, 1.6], "size": [0.1, 0.18], "cols": [Color("ffd9a0"), Color("ec8044")], "alpha": 0.9}))
+			return get_tree().create_timer(0.42 / time_scale).timeout
+		"archangel":
+			spell("bless", allies, from)
+			spell("revive", [], from)
+		"ancientent":
+			spell("heal", allies, from)
+		"madjester":
+			for t: Vector3 in foes.slice(0, 3):
+				_sprite(_front(t), "star", 0.4, 1.6, Color("ffe6a0"), 0.4, {"alpha": 0.8, "add": true})
+	return get_tree().create_timer(0.35 / time_scale).timeout
+
 func victory(center: Vector3) -> void:
 	var c: Array = _pal("D")
 	_burst(Vector3(center.x, 0.3, center.z), {"tex": "soft", "n": 48, "life": 2.0, "expl": 0.25, "box": Vector3(4.0, 0.1, 0.9),

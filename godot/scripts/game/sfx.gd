@@ -164,7 +164,8 @@ func play(name: String) -> void:
 ##   buff_up buff_down revive soul whoosh victory_sting defeat_sting
 ##   spell_<ключ Data.MAGIC>: fireball heal bless rage freeze meteor surge pact curse chain revive venom guillotine
 const FX_SOUNDS := ["hit_ice", "hit_fire", "hit_light", "hit_nature", "hit_neutral", "crit", "heal", "shield",
-	"freeze", "stun", "poison", "buff_up", "buff_down", "revive", "soul", "whoosh", "victory_sting", "defeat_sting"]
+	"freeze", "stun", "poison", "buff_up", "buff_down", "revive", "soul", "whoosh", "victory_sting", "defeat_sting",
+	"roar", "awaken", "legend"]
 const SPELL_SOUNDS := ["fireball", "heal", "bless", "rage", "freeze", "meteor", "surge", "pact", "curse",
 	"chain", "revive", "venom", "guillotine"]
 
@@ -339,6 +340,27 @@ func _fx_sound(name: String) -> AudioStreamWAV:
 			for f in [392.0, 493.9, 587.3, 784.0]:
 				_sine(b, 0.3, 0.85, f, f, 0.15, 0.08, 3.0, [1.0, 0.15])
 			_bell(b, 0.3, 1568.0, 0.08, 4.0, 0.8)
+			rms = 0.12
+		"roar":          # рык Стража: низкий рокот с биениями и хрипом (без высоких частот)
+			b = _buf(1.5)
+			_sine(b, 0.0, 1.4, 92.0, 70.0, 0.5, 0.12, 1.8, [1.0, 0.8, 0.6, 0.45, 0.3, 0.2], 0.03)
+			_sine(b, 0.0, 1.4, 95.0, 72.0, 0.35, 0.12, 1.8, [1.0, 0.6, 0.4], 0.03)
+			_noise(b, 0.0, 1.3, 0.45, 0.04, 0.15, 2.2, true, 0.6, 0.5)
+			_thud(b, 0.0, 70.0, 0.6, 5.0)
+			rms = 0.16
+		"awaken":        # восходящие колокольчики и мажорная подушка
+			b = _buf(1.8)
+			var an := [392.0, 493.9, 587.3, 784.0, 987.8]
+			for i in an.size():
+				_bell(b, i * 0.09, an[i], 0.2, 3.0, 1.2)
+			for f in [196.0, 293.7, 392.0]:
+				_sine(b, 0.15, 1.6, f, f, 0.12, 0.3, 1.8, [1.0, 0.25, 0.1], 0.004)
+			rms = 0.13
+		"legend":        # короткий золотой аккорд приёма легенды
+			b = _buf(1.0)
+			for f in [261.6, 329.6, 392.0, 523.3]:
+				_sine(b, 0.0, 0.95, f, f, 0.14, 0.04, 2.8, [1.0, 0.35, 0.12], 0.004)
+			_bell(b, 0.0, 1046.5, 0.1, 4.0, 0.8)
 			rms = 0.12
 		"soul":          # тихий уходящий выдох (для гибели)
 			b = _buf(0.8)
