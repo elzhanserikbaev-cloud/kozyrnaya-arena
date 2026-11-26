@@ -19,6 +19,7 @@ static func rank_label(rank: int) -> String:
 		12: return "Q"
 		13: return "K"
 		14: return "A"
+		0: return "★"   # Безумный шут (легенда-Джокер): ранга нет
 	return str(rank)
 
 static func cap_of(level: int) -> int:
@@ -162,7 +163,29 @@ static func unique_units(units: Array) -> Array:
 	return out
 
 static func has_joker(u: Dictionary) -> bool:
-	return items_of(u).has("joker")
+	return items_of(u).has("joker") or (D.LEGENDS.has(u["id"]) and D.LEGENDS[u["id"]].has("wild"))
+
+# ---------- легенды (дополнения) ----------
+
+## На поле не больше одной легенды: так на любом ранге максимум 3 карты и каре — только с Джокером.
+const LEGEND_BOARD_MAX: int = 1
+
+static func is_legend(u: Variant) -> bool:
+	return u is Dictionary and D.LEGENDS.has(str(u["id"]))
+
+static func legend_count(units: Array) -> int:
+	var n: int = 0
+	for u: Variant in units:
+		if is_legend(u):
+			n += 1
+	return n
+
+## Есть ли у стороны (поле + скамья) эта легенда.
+static func owns_id(side: Dictionary, id: String) -> bool:
+	for u: Dictionary in all_units(side):
+		if u["id"] == id:
+			return true
+	return false
 
 ## Рука с учётом Джокера: перебираем ранги и стихии для карт с Джокером (до 2) и берём лучшую.
 static func eval_units(units: Array) -> String:
@@ -231,8 +254,8 @@ static func roll_id(level: int, rng: Rng) -> String:
 		c += 1
 	var cost: int = mini(c, 4) + 1
 	var pool: Array = []
-	for id: String in D.HEROES:
-		if int(D.HEROES[id]["c"]) == cost:
+	for id: String in D.BASE_HEROES:   # только герои магазина: легенды и монстры не выпадают
+		if int(D.BASE_HEROES[id]["c"]) == cost:
 			pool.append(id)
 	return pool[int(floorf(rng.next() * float(pool.size())))]
 
@@ -250,7 +273,7 @@ static func help_id(level: int, side: Dictionary, rng: Rng) -> String:
 	for u: Dictionary in mine:
 		if int(u["star"]) < 3 and not copies.has(u["id"]):
 			copies.append(u["id"])
-	copies = copies.filter(func(id: String) -> bool: return int(odds[mini(int(D.HEROES[id]["c"]), 5) - 1]) > 0)
+	copies = copies.filter(func(id: String) -> bool: return D.BASE_HEROES.has(id) and int(odds[mini(int(D.HEROES[id]["c"]), 5) - 1]) > 0)
 	var ranks: Dictionary = {}
 	for u: Dictionary in board_units(side):
 		ranks[int(D.HEROES[u["id"]]["r"])] = true
@@ -258,8 +281,8 @@ static func help_id(level: int, side: Dictionary, rng: Rng) -> String:
 	for u: Dictionary in mine:
 		have[u["id"]] = true
 	var mates: Array = []
-	for id: String in D.HEROES:
-		var d: Dictionary = D.HEROES[id]
+	for id: String in D.BASE_HEROES:
+		var d: Dictionary = D.BASE_HEROES[id]
 		if ranks.has(int(d["r"])) and not have.has(id) and int(odds[mini(int(d["c"]), 5) - 1]) > 0:
 			mates.append(id)
 	var pool: Array
@@ -450,6 +473,8 @@ static func income(side: Dictionary, bonus: int = 0) -> Dictionary:
 static func survivor_score(units: Array) -> int:
 	var s: int = 0
 	for u: Dictionary in units:
+		if u.get("summoned", false):
+			continue   # призванные в бою (Росток) очков не дают
 		s += int(u["star"]) + (1 if int(D.HEROES[u["id"]]["c"]) >= 4 else 0)
 	return s
 

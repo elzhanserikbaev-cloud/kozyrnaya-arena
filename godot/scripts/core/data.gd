@@ -24,7 +24,8 @@ const SUITS: Dictionary = {
 
 ## id → {id, n, ic, s, r, c, hp, atk, mm, ab:{t, v, n}}. Порядок ключей = порядок RAW в JS (важен для пулов магазина).
 ## На каждом ранге не больше 3 разных героев: каре собирается только с Джокером.
-const HEROES: Dictionary = {
+## Это ТОЛЬКО герои магазина. Общий справочник для боя/рендера — HEROES (ниже): BASE_HEROES + LEGENDS + MONSTERS.
+const BASE_HEROES: Dictionary = {
 	"cutpurse": {"id": "cutpurse", "n": "Карманник", "ic": "robber", "s": "S", "r": 2, "c": 1, "hp": 440, "atk": 58, "mm": 50, "ab": {"t": "strike", "v": 2.4, "n": "Удар исподтишка"}},
 	"leech": {"id": "leech", "n": "Кровопийца", "ic": "bat", "s": "H", "r": 2, "c": 1, "hp": 500, "atk": 46, "mm": 60, "ab": {"t": "drain", "v": 1.8, "n": "Укус"}},
 	"spider": {"id": "spider", "n": "Могильный паук", "ic": "hanging-spider", "s": "C", "r": 2, "c": 1, "hp": 480, "atk": 44, "mm": 60, "ab": {"t": "poison", "v": 0.55, "n": "Трупный яд"}},
@@ -63,6 +64,74 @@ const HEROES: Dictionary = {
 	"reaper": {"id": "reaper", "n": "Жнец", "ic": "grim-reaper", "s": "S", "r": 14, "c": 5, "hp": 1150, "atk": 138, "mm": 80, "ab": {"t": "reap", "v": 1.55, "n": "Жатва"}},
 	"blooddemon": {"id": "blooddemon", "n": "Демон крови", "ic": "devil-mask", "s": "H", "r": 14, "c": 5, "hp": 1350, "atk": 118, "mm": 100, "ab": {"t": "sunburst", "v": 1.7, "n": "Кровавая буря"}},
 }
+
+## ---------------- Дополнения (только при Match.new(seed, true)) ----------------
+## Легенды: стоимость 6, тир 6, в магазине НЕ продаются (только награда за Стража арены).
+## Свободных рангов для 5 легенд нет: у всех рангов 2..12 уже по 3 героя, у K и A — по 2.
+## Поэтому: 4 стихийные легенды стоят на K и A (по две), а правило «каре только с Джокером»
+## держится ограничением «на поле не больше одной легенды» (Rules.LEGEND_BOARD_MAX) —
+## на поле на любом ранге максимум 2 обычных героя + 1 легенда = 3 карты.
+## Пятая легенда — Безумный шут: ранга нет (r = 0, «★»), в покерной руке он сам Джокер (wild).
+## Ледяная легенда стоит на A (не на K), иначе 10-J-Q-K-A Льда собирался бы без Джокера.
+const LEGENDS: Dictionary = {
+	"frostdragon": {"id": "frostdragon", "n": "Ледяной дракон", "ic": "dragon-head", "s": "S", "r": 14, "c": 6, "hp": 1700, "atk": 140, "mm": 110, "legend": true, "ab": {"t": "frostbreath", "v": 0.9, "n": "Ледяное дыхание"}},
+	"phoenix": {"id": "phoenix", "n": "Феникс", "ic": "eagle-emblem", "s": "H", "r": 14, "c": 6, "hp": 1400, "atk": 140, "mm": 90, "legend": true, "ab": {"t": "phoenix", "v": 1.5, "n": "Пламя возрождения"}},
+	"archangel": {"id": "archangel", "n": "Архангел", "ic": "angel-outfit", "s": "D", "r": 13, "c": 6, "hp": 1900, "atk": 104, "mm": 100, "legend": true, "ab": {"t": "aegis", "v": 2.0, "n": "Небесный покров"}},
+	"ancientent": {"id": "ancientent", "n": "Древний энт", "ic": "evil-tree", "s": "C", "r": 13, "c": 6, "hp": 2300, "atk": 96, "mm": 100, "legend": true, "ab": {"t": "grove", "v": 2.5, "n": "Зов леса"}},
+	"madjester": {"id": "madjester", "n": "Безумный шут", "ic": "sharp-smile", "s": "H", "r": 0, "c": 6, "hp": 1400, "atk": 128, "mm": 80, "legend": true, "wild": true, "ab": {"t": "jest", "v": 1.2, "n": "Смертельная шутка"}},
+}
+
+## Монстры Стража арены (каждый 5-й раунд). Никогда не в магазине. c — «угроза» (для очков выживших: босс c=5 даёт +1).
+## m_sapling — Росток, которого сажает Древний энт (summon), в бою не выставляется.
+const MONSTERS: Dictionary = {
+	"m_golem": {"id": "m_golem", "n": "Каменный голем", "ic": "golem-head", "s": "C", "r": 13, "c": 5, "hp": 1500, "atk": 62, "mm": 90, "monster": true, "ab": {"t": "stunall", "v": 0.9, "n": "Землетрясение"}},
+	"m_slime": {"id": "m_slime", "n": "Могильная слизь", "ic": "slime", "s": "C", "r": 3, "c": 1, "hp": 620, "atk": 34, "mm": 70, "monster": true, "ab": {"t": "shield", "v": 2.0, "n": "Вязкая плоть"}},
+	"m_rat": {"id": "m_rat", "n": "Чумная крыса", "ic": "rat", "s": "C", "r": 2, "c": 1, "hp": 380, "atk": 40, "mm": 50, "monster": true, "ab": {"t": "poison", "v": 0.5, "n": "Заразный укус"}},
+	"m_ghoul": {"id": "m_ghoul", "n": "Упырь", "ic": "bone-gnawer", "s": "H", "r": 5, "c": 2, "hp": 560, "atk": 52, "mm": 60, "monster": true, "ab": {"t": "drain", "v": 1.6, "n": "Трупный пир"}},
+	"m_harpy": {"id": "m_harpy", "n": "Гарпия", "ic": "harpy", "s": "D", "r": 7, "c": 2, "hp": 500, "atk": 58, "mm": 60, "monster": true, "ab": {"t": "execute", "v": 1.8, "n": "Когти с высоты"}},
+	"m_bonedragon": {"id": "m_bonedragon", "n": "Костяной дракон", "ic": "wyvern", "s": "S", "r": 14, "c": 5, "hp": 1500, "atk": 96, "mm": 100, "monster": true, "ab": {"t": "reap", "v": 1.1, "n": "Мёртвое пламя"}},
+	"m_icegolem": {"id": "m_icegolem", "n": "Ледяной истукан", "ic": "ice-golem", "s": "S", "r": 10, "c": 3, "hp": 1050, "atk": 48, "mm": 80, "monster": true, "ab": {"t": "shield", "v": 3.0, "n": "Ледяной панцирь"}},
+	"m_spectre": {"id": "m_spectre", "n": "Ледяной призрак", "ic": "spectre", "s": "S", "r": 8, "c": 3, "hp": 600, "atk": 60, "mm": 70, "monster": true, "ab": {"t": "stun", "v": 1.6, "n": "Могильный холод"}},
+	"m_banshee": {"id": "m_banshee", "n": "Банши", "ic": "ghost", "s": "D", "r": 9, "c": 3, "hp": 560, "atk": 54, "mm": 80, "monster": true, "ab": {"t": "volley", "v": 1.0, "n": "Вой по мёртвым"}},
+	"m_abyss": {"id": "m_abyss", "n": "Владыка бездны", "ic": "daemon-skull", "s": "H", "r": 12, "c": 5, "hp": 1650, "atk": 92, "mm": 100, "monster": true, "ab": {"t": "sunburst", "v": 1.2, "n": "Пламя бездны"}},
+	"m_minotaur": {"id": "m_minotaur", "n": "Минотавр", "ic": "minotaur", "s": "D", "r": 11, "c": 3, "hp": 980, "atk": 72, "mm": 70, "monster": true, "ab": {"t": "cleave", "v": 1.5, "n": "Таран"}},
+	"m_imp": {"id": "m_imp", "n": "Бес", "ic": "imp", "s": "H", "r": 4, "c": 1, "hp": 420, "atk": 54, "mm": 50, "monster": true, "ab": {"t": "strike", "v": 2.2, "n": "Подлый укол"}},
+	"m_sapling": {"id": "m_sapling", "n": "Росток", "ic": "sprout", "s": "C", "r": 2, "c": 0, "hp": 900, "atk": 50, "mm": 60, "monster": true, "summon": true, "ab": {"t": "heal", "v": 2.0, "n": "Сок жизни"}},
+}
+
+## Темы Стража арены по кругу: раунд 5 → 0, 10 → 1, 15 → 2, 20 → 0 (сильнее) …
+## Босс встаёт в центр (линия 2), приспешники — в линии 1, 3, 0, 4 (сколько нужно по раунду).
+const MONSTER_THEMES: Array = [
+	{"key": "golem", "name": "Каменный голем", "boss": "m_golem", "minions": ["m_slime", "m_rat", "m_ghoul", "m_harpy"]},
+	{"key": "bonedragon", "name": "Костяной дракон", "boss": "m_bonedragon", "minions": ["m_icegolem", "m_spectre", "m_banshee", "m_harpy"]},
+	{"key": "abyss", "name": "Владыка бездны", "boss": "m_abyss", "minions": ["m_minotaur", "m_imp", "m_ghoul", "m_banshee"]},
+]
+const MONSTER_EVERY: int = 5
+## Множитель статов монстров по тиру (тир = раунд / 5): индекс 1..4, дальше +MONSTER_MULT_STEP за тир.
+const MONSTER_MULT: Array = [1.0, 2.1, 1.9, 1.8, 2.4]
+const MONSTER_MULT_STEP: float = 0.5
+const REWARD_GOLD: int = 6
+## Цвет тира по стоимости (0 — монстр/призыв, 6 — легенда).
+const TIERC: Array = [Color(0.55, 0.20, 0.18), Color(0.62, 0.62, 0.62), Color(0.36, 0.66, 0.36), Color(0.30, 0.52, 0.86), Color(0.62, 0.36, 0.82), Color(0.90, 0.62, 0.18), Color(0.98, 0.80, 0.32)]
+
+## Полный справочник карт (магазин + легенды + монстры): его используют бой, правила и рендер карт.
+## Порядок: сначала BASE_HEROES (как раньше), затем легенды и монстры. Пулы магазина берут только BASE_HEROES.
+static var HEROES: Dictionary = _all_heroes()
+
+static func _all_heroes() -> Dictionary:
+	var h: Dictionary = BASE_HEROES.duplicate()
+	h.merge(LEGENDS)
+	h.merge(MONSTERS)
+	return h
+
+static func is_legend(id: String) -> bool:
+	return LEGENDS.has(id)
+
+static func is_monster(id: String) -> bool:
+	return MONSTERS.has(id)
+
+static func is_shop_hero(id: String) -> bool:
+	return BASE_HEROES.has(id)
 
 ## Копии одного героя в руке считаются одной картой; бонусы растут с редкостью руки.
 const HANDS: Dictionary = {
@@ -162,6 +231,12 @@ static func ab_text(t: String, v: float, a: int) -> String:
 		"sunburst": return "Бьёт всех врагов на %d и лечит союзников на %d." % [p, a]
 		"plague": return "Травит всех врагов: %d урона за ход, 3 хода." % p
 		"raise": return "Поднимает первого павшего союзника с 40%% ОЗ. Если павших нет, лечится на %d." % p
+		# --- легенды (дополнения) ---
+		"frostbreath": return "Бьёт всех врагов на %d, замораживает их на ход и сжигает половину их маны." % p
+		"phoenix": return "Бьёт цель и соседей на %d и поджигает. Раз за бой восстаёт из пепла с 50%% ОЗ." % p
+		"aegis": return "Всем союзникам щит %d и лечение %d, снимает с них яд и оглушение." % [p, r(v * a * 0.5)]
+		"grove": return "Сажает Росток в пустую линию. Если места нет, все союзники получают +%d ОЗ." % p
+		"jest": return "Трижды бьёт случайного врага на %d, может оглушить. В покерной руке — Джокер." % p
 	return ""
 
 ## Описание способности героя с числами для указанной звезды (и съеденных карт, если переданы).

@@ -161,7 +161,8 @@ func _build_hero(root: Control, id: String, star: int, items: Array, fed) -> voi
 	var el: String = ELEM[d.s]
 	var su: Dictionary = Data.SUITS[d.s]
 	_rect_tex(root, tex("res://assets/portraits/hero_%s.png" % id), PORTRAIT, su.color.darkened(0.4))
-	_rect_tex(root, tex("res://assets/cards/frame_%s_%d.png" % [el, star]), Rect2(0, 0, TW, TH), Color(0, 0, 0, 0))
+	var frame_path := "res://assets/cards/frame_legend.png" if Data.is_legend(id) else "res://assets/cards/frame_%s_%d.png" % [el, star]
+	_rect_tex(root, tex(frame_path), Rect2(0, 0, TW, TH), Color(0, 0, 0, 0))
 	# угловой медальон: ранг и стихия
 	# ранг, АТК и ОЗ рисуются чёткими подписями поверх карты (3D: Label3D, интерфейс: Label)
 	# цена в октагоне

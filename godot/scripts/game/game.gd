@@ -23,18 +23,25 @@ var _pending_toasts: Array = []
 var _lp_id := 0
 var _lp_pos := Vector2.ZERO
 var _lp_fired := false
+var fx: Fx
+var _last_spell := ""
 
 func _ready() -> void:
 	table = Table3D.new()
 	add_child(table)
+	fx = Fx.new()
+	table.add_child(fx)
 	hud = Hud.new()
 	add_child(hud)
 	hud.act.connect(_on_act)
 	table.hover_changed.connect(_on_hover)
-	m = Match.new()
+	m = Match.new(-1, true)
 	m.new_game("normal")
 	_sync_all(false)
+	if DisplayServer.is_touchscreen_available() and not FileAccess.file_exists("user://settings.json"):
+		settings.big_ui = true   # телефон/планшет: крупнее по умолчанию
 	_load_settings()
+	_apply_settings()
 	_show_start()
 	_dev_args()
 
@@ -99,6 +106,68 @@ func _log_line(t: String) -> void:
 		var f := FileAccess.open(_auto_log, FileAccess.READ_WRITE if FileAccess.file_exists(_auto_log) else FileAccess.WRITE)
 		if f:
 			f.seek_end(); f.store_line(t)
+
+## Автотест обучения: проходит все шаги действиями игрока.
+func _tuttest() -> void:
+	_on_act("tutorial", null)
+	await get_tree().create_timer(0.5).timeout
+	var log := []
+	log.append(tutorial.step)
+	tutorial.advance()                       # приветствие → купить
+	await get_tree().create_timer(0.3).timeout
+	_on_act("buy", 0)
+	await get_tree().create_timer(0.5).timeout
+	log.append(tutorial.step)
+	m.move("bench", 0, "board", 2)
+	_sync_all(false)
+	await get_tree().create_timer(0.5).timeout
+	log.append(tutorial.step)
+	tutorial.advance(); tutorial.advance()   # рука, стихии → бой
+	log.append(tutorial.step)
+	_fight()
+	await get_tree().create_timer(0.8).timeout
+	skip_battle = true
+	await get_tree().create_timer(3.0).timeout
+	hud.show_overlay(null)
+	_next_round()
+	await get_tree().create_timer(0.8).timeout
+	log.append([tutorial.step if tutorial else "done", m.round_n, m.phase, tutorial._battle_round if tutorial else -9, in_battle])
+	tutorial.advance()
+	await get_tree().create_timer(0.3).timeout
+	print("tutorial steps: ", log, " finished=", tutorial == null, " saved=", settings.tutorial_done)
+	get_tree().quit()
+
+## Автотест: раунд Стража (5-й), победа, окно награды, выбор легенды.
+func _monstertest(args: PackedStringArray) -> void:
+	hud.show_overlay(null)
+	m = Match.new(777, true)
+	m.new_game("normal")
+	m.round_n = 5; m.p.level = 6; m.p.gold = 30
+	m.p.board = [Rules.new_unit("reaper", 2), Rules.new_unit("blooddemon", 2), Rules.new_unit("tyrant", 2), Rules.new_unit("plaguelord", 2), Rules.new_unit("guildmaster", 2)]
+	for k in cards: cards[k].queue_free()
+	cards.clear()
+	_sync_all(false)
+	print("monster round: ", m.is_monster_round(), " ", Match.monster_info(5).title, " enemy cards: ", cards.keys().filter(func(k): return k.begins_with("e:")).size())
+	var shot := ""
+	for a in args:
+		if a.begins_with("--mshot="): shot = a.substr(8)
+	await get_tree().create_timer(1.5).timeout
+	if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_pre.png"))
+	_fight()
+	await get_tree().create_timer(1.0).timeout
+	skip_battle = true
+	await get_tree().create_timer(3.0).timeout
+	print("result: ", m.last_result.get("outcome"), " monster=", m.last_result.get("monster"), " pending=", m.pending_reward.map(func(o): return o.type))
+	if shot != "": get_viewport().get_texture().get_image().save_png(shot)
+	if not m.pending_reward.is_empty():
+		var r := m.choose_reward(0)
+		print("chose: ", r.get("ok"), " ", r.get("offer", {}).get("title", ""))
+		hud.show_overlay(null)
+		_next_round()
+		await get_tree().create_timer(1.0).timeout
+		print("round now ", m.round_n, " legends owned: ", Rules.all_units(m.p).filter(func(u): return Data.is_legend(u.id)).map(func(u): return u.id))
+		if shot != "": get_viewport().get_texture().get_image().save_png(shot.replace(".png", "_after.png"))
+	get_tree().quit()
 
 ## Автотест: после боя (с «Пропустить») ни одна карта не лежит и не затемнена.
 func _battletest() -> void:
@@ -206,6 +275,10 @@ func _dev_args() -> void:
 		elif a == "--uitest": _uitest()
 		elif a == "--battletest": _battletest()
 		elif a == "--continue": _on_act("continue", null)
+		elif a == "--tutorial": _on_act("tutorial", null)
+		elif a == "--tuttest": _tuttest()
+		elif a == "--monstertest": _monstertest(args)
+		elif a == "--settings": _show_settings()
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
@@ -254,12 +327,24 @@ func _pos_for(z: String, i: int, enemy: bool) -> Vector3:
 		return Table3D.pos_enemy(i)
 	return Table3D.pos_board(i) if z == "board" else Table3D.pos_bench(i)
 
+## Кого показывать на линии соперника: обычно поле ИИ (или соперника в сети), в раунд Стража — отряд Стража.
+func _enemy_board() -> Array:
+	if net_game == null and m.extras and m.is_monster_round() and m.phase in ["shop", "battle", "result"]:
+		return Match.monster_info(m.round_n).board
+	return m.ai.board
+
+func _enemy_name() -> String:
+	if net_game == null and m.extras and m.is_monster_round():
+		return String(Match.monster_info(m.round_n).title)
+	return "Соперник" if net_game == null else net_game.opp_name()
+
 func _sync_cards(animate := true, spawn_from := Vector3.INF) -> void:
 	var want := {}
 	for e in _side_units(m.p):
 		want["p:%d" % e.u.uid] = {"u": e.u, "pos": _pos_for(e.z, e.i, false), "side": "p"}
-	for i in m.ai.board.size():
-		var u = m.ai.board[i]
+	var eb := _enemy_board()
+	for i in eb.size():
+		var u = eb[i]
 		if u != null:
 			want["e:%d" % u.uid] = {"u": u, "pos": Table3D.pos_enemy(i), "side": "e"}
 	for k in cards.keys():
@@ -306,7 +391,7 @@ func _sync_all(animate := true, spawn_from := Vector3.INF) -> void:
 
 func _refresh_hud() -> void:
 	var p: Dictionary = m.p
-	var foe_name: String = "Соперник" if net_game == null else net_game.opp_name()
+	var foe_name: String = _enemy_name()
 	hud.set_hp(int(p.hp), int(m.ai.hp) if net_game == null else net_game.opp_hp(), foe_name)
 	hud.lbl_round.text = "Раунд %d" % m.round_n
 	var board := Rules.board_units(p)
@@ -339,6 +424,57 @@ func _refresh_hud() -> void:
 	hud.set_chips(chips)
 	hud.set_hint(_step_hint())
 	_update_slots()
+	_update_hand_view(board, info.hand)
+
+## Какие герои составляют покерную комбинацию (uid). Копии одного героя считаются одной картой.
+func _hand_members(units: Array, hand_key: String) -> Array:
+	var uniq := Rules.unique_units(units)
+	var out: Array = []
+	if hand_key == "high" or uniq.is_empty():
+		return out
+	if hand_key in ["straight", "flush", "sflush", "royal"]:
+		for u in uniq:
+			out.append(int(u.uid))
+		return out
+	var cnt := {}
+	for u in uniq:
+		var r := int(Data.HEROES[u.id].r)
+		cnt[r] = int(cnt.get(r, 0)) + 1
+	for u in uniq:
+		var joker: bool = (u.get("items", []) as Array).has("joker")
+		if int(cnt[int(Data.HEROES[u.id].r)]) >= 2 or joker:
+			out.append(int(u.uid))
+	return out
+
+## Подсветка карт комбинации, таблички рук у разделительной полосы, подсказки «→ рука» в магазине.
+func _update_hand_view(board: Array, my_hand: String) -> void:
+	var mine := _hand_members(board, my_hand)
+	var eunits: Array = _enemy_board().filter(func(u): return u != null)
+	var ehand: String = Rules.team_info(eunits).hand if not eunits.is_empty() else "high"
+	var theirs := _hand_members(eunits, ehand)
+	for k in cards:
+		var c: Card3D = cards[k]
+		var on_board := _is_on_board(k)
+		c.set_in_hand(on_board and ((c.side == "p" and mine.has(c.uid)) or (c.side == "e" and theirs.has(c.uid))))
+	var who: String = "Страж арены" if _enemy_name().begins_with("Страж") else _enemy_name()
+	var eb: String = Data.hand_text(ehand)
+	var mb: String = Data.hand_text(my_hand)
+	table.set_hands(who, Data.HANDS[ehand].n if not eunits.is_empty() else "—", "" if eb == "без бонуса" else eb,
+		Data.HANDS[my_hand].n, "" if mb == "без бонуса" else mb)
+	# магазин: какая рука получится, если купить и поставить этого героя
+	var badges: Array = []
+	var cap := Rules.cap_of(int(m.p.level))
+	var cur := Data.HAND_ORDER.find(my_hand)
+	for id in m.shop:
+		var txt := ""
+		if id != null and board.size() < cap and not board.any(func(u): return u.id == id):
+			var test := board.duplicate()
+			test.append({"uid": -1, "id": id, "star": 1, "items": [], "fed": null})
+			var h: String = Rules.eval_units(test)
+			if Data.HAND_ORDER.find(h) > cur:
+				txt = "→ " + String(Data.HANDS[h].n)
+		badges.append(txt)
+	hud.set_shop_badges(badges)
 
 func _step_hint() -> String:
 	if in_battle:
@@ -349,6 +485,8 @@ func _step_hint() -> String:
 	if hand_sel >= 0:
 		return "Выберите героя, которому отдать усиление."
 	var p: Dictionary = m.p
+	if net_game == null and m.extras and m.is_monster_round() and m.phase == "shop":
+		return "%s! Победите — выберете награду, в том числе легендарного героя. Поражение отнимет вдвое меньше ОЗ." % Match.monster_info(m.round_n).title
 	if Rules.all_units(p).is_empty():
 		return "Купите героя в магазине внизу: клик по карте."
 	if Rules.board_count(p) == 0:
@@ -434,6 +572,7 @@ func _on_act(name: String, arg: Variant) -> void:
 				_fight()
 		"speed":
 			speed = arg
+			fx.time_scale = speed / 2.0
 			hud.set_battle_mode(true, speed)
 		"skip":
 			skip_battle = true
@@ -471,6 +610,20 @@ func _on_act(name: String, arg: Variant) -> void:
 			_show_rules()
 		"side":
 			hud.toggle_side()
+		"tutorial":
+			hud.show_overlay(null)
+			_start_tutorial()
+		"settings":
+			_show_settings()
+		"set_speed":
+			settings.speed = arg
+			_save_settings(); _apply_settings(); _show_settings()
+		"toggle_fs":
+			settings.fullscreen = not settings.fullscreen
+			_save_settings(); _apply_settings(); _show_settings()
+		"toggle_big":
+			settings.big_ui = not settings.big_ui
+			_save_settings(); _apply_settings(); _show_settings()
 		"menu":
 			_show_start()
 		"start":
@@ -782,10 +935,13 @@ func _play_battle(b, my_tag: String, step_source: Callable = Callable()) -> void
 		c.show_bars(c.position.distance_to(Table3D.pos_bench(0)) > 0.1 and _is_on_board(k))
 	_update_bars(b)
 	hud.set_battle_mode(true, speed)
+	fx.time_scale = speed / 2.0
 	hud.clear_log()
 	var my_hand: String = Data.HANDS[b.team_hand(my_tag)].n
 	var their_hand: String = Data.HANDS[b.team_hand(Battle.other(my_tag))].n
 	hud.add_log("Раунд %d: %s против %s" % [m.round_n, my_hand, their_hand], "#f3cf73")
+	if net_game == null and m.extras and m.is_monster_round():
+		hud.show_banner(String(Match.monster_info(m.round_n).title), Color("e8b86a")); await _wait(1.4)
 	if m.p.allin:
 		hud.show_banner("Вы идёте ва-банк!", Color("e06a5a")); await _wait(1.2)
 	_refresh_hud()
@@ -823,33 +979,60 @@ func _update_bars(b) -> void:
 			c.set_bars(int(u.hp), int(u.max_hp), int(u.mana), int(u.mm), int(u.shield))
 
 func _animate(evs: Array, b, my_tag: String) -> void:
+	var anim := not skip_battle
 	for e in evs:
 		var c := _card_at_slot(int(e.get("u", -99)))
 		match String(e.t):
 			"step":
 				hud.set_step("Ход %d" % e.n)
 			"spell":
+				_last_spell = String(e.key)
 				var mine: bool = e.side == my_tag
 				hud.show_banner(Data.MAGIC[e.key].n, Color("f3cf73") if mine else Color("e88a7a"))
 				hud.add_log("%s разыгрывает «%s»" % ["Вы" if mine else "Соперник", Data.MAGIC[e.key].n], "#9fd0ff" if mine else "#ffb0a0")
-				Sfx.play("cast")
-				await _wait(0.6)
+				Sfx.play("spell_" + String(e.key))
+				if anim:
+					var my_center := Vector3(0, 0, 3.2) if mine else Vector3(0, 0, -3.8)
+					var tg: Array = []
+					if int(e.tgt) >= 0:
+						var tc := _card_at_slot(int(e.tgt))
+						if tc: tg.append(tc.global_position)
+					else:
+						var foe_side: bool = String(e.key) in ["freeze", "meteor", "venom"]
+						for u in b.units():
+							if (u.side == e.side) != foe_side and int(u.hp) > 0:
+								var uc := _card_at_slot(int(u.slot))
+								if uc: tg.append(uc.global_position)
+					await fx.spell(String(e.key), tg, my_center)
 			"attack":
 				var t := _card_at_slot(int(e.tgt))
-				if c and t and not skip_battle:
+				if c and t and anim:
 					c.lunge(t.position)
-					Sfx.play("hit")
 					await _wait(0.16)
 			"cast":
 				if c:
 					c.pop(1.15)
 					c.float_text(String(e.name), Color("ffe6a8"))
+					var el := Fx.elem_of_hero(c.key)
 					Sfx.play("cast")
-					await _wait(0.3)
+					if anim:
+						fx.cast(c.global_position, el)
+						var t := _card_at_slot(int(e.tgt))
+						if t and t != c and String(e.ab) in Fx.RANGED_AB:
+							Sfx.play("whoosh")
+							await fx.projectile(c.global_position, t.global_position, el)
+						else:
+							await _wait(0.3)
 			"hit":
 				var t := _card_at_slot(int(e.tgt))
 				if t:
-					t.shake(0.06 if not e.crit else 0.12)
+					var src := _card_at_slot(int(e.src))
+					var el: String = Fx.elem_of_hero(src.key) if src else String(Fx.SPELL_ELEM.get(_last_spell, ""))
+					if anim:
+						t.shake(0.06 if not e.crit else 0.12)
+						fx.hit(t.global_position, el, bool(e.crit), String(e.kind))
+					var snd: String = "crit" if e.crit else ("poison" if e.kind == "poison" else "hit_" + String({"S": "ice", "H": "fire", "D": "light", "C": "nature"}.get(el, "neutral")))
+					Sfx.play(snd)
 					var txt := "-%d" % int(e.dmg) if int(e.dmg) > 0 else ("щит" if int(e.absorbed) > 0 else "0")
 					var col := Color("ffffff") if not e.crit else Color("ffcf5a")
 					if e.kind == "poison": col = Color("a6e26a")
@@ -859,26 +1042,89 @@ func _animate(evs: Array, b, my_tag: String) -> void:
 			"death":
 				if c:
 					c.die()
-					Sfx.play("death")
+					Sfx.play("soul")
+					if anim:
+						fx.death(c.global_position, Fx.elem_of_hero(c.key))
 					await _wait(0.25)
 			"heal":
 				if c and int(e.amount) > 0:
 					c.float_text("+%d" % int(e.amount), Color("7fe0a0"))
+					if anim and e.kind != "regen":
+						fx.heal(c.global_position); Sfx.play("heal")
 			"shield":
-				if c: c.float_text("щит +%d" % int(e.amount), Color("e8f0ff"))
+				if c:
+					c.float_text("щит +%d" % int(e.amount), Color("e8f0ff"))
+					if anim:
+						fx.shield(c.global_position, Color("f2dea0") if e.kind == "spell" else Color(0, 0, 0, 0)); Sfx.play("shield")
 			"stun":
-				if c: c.float_text("заморожен" if e.kind == "spell" else "оглушён", Color("bfe3ff"))
+				if c:
+					c.float_text("заморожен" if e.kind == "spell" else "оглушён", Color("bfe3ff"))
+					if anim:
+						fx.stun(c.global_position, e.kind == "spell"); Sfx.play("freeze" if e.kind == "spell" else "stun")
 			"poison":
-				if c: c.float_text("яд", Color("a6e26a"))
+				if c:
+					c.float_text("яд", Color("a6e26a"))
+					if anim:
+						fx.poison(c.global_position); Sfx.play("poison")
 			"buff":
-				if c: c.float_text("%+d%% АТК" % int(e.pct), Color("ffd39a") if int(e.pct) > 0 else Color("c9b0ff"))
+				if c and String(e.get("stat", "atk")) == "hp":
+					c.float_text("+%d ОЗ" % int(e.get("amount", 0)), Color("8fe0a6"))
+					if anim: fx.buff(c.global_position, true)
+				elif c:
+					c.float_text("%+d%% АТК" % int(e.pct), Color("ffd39a") if int(e.pct) > 0 else Color("c9b0ff"))
+					if anim:
+						fx.buff(c.global_position, int(e.pct) > 0); Sfx.play("buff_up" if int(e.pct) > 0 else "buff_down")
+			"mana":
+				if c and String(e.get("kind", "")) == "ability":
+					c.float_text("мана сгорела", Color("9fc4ff"))
 			"revive":
 				if c:
 					c.revive(); c.show_bars(true)
-					c.float_text("восстал", Color("ffe6a8"))
+					c.float_text("возродился из пепла!" if String(e.get("kind", "")) == "rebirth" else "восстал", Color("ffc070") if String(e.get("kind", "")) == "rebirth" else Color("ffe6a8"))
+					if anim:
+						fx.revive(c.global_position); Sfx.play("revive")
 					await _wait(0.3)
+			"summon":
+				var key := ("p:%d" if e.side == my_tag else "e:%d") % int(e.uid)
+				var lane := int(e.lane)
+				var pos := Table3D.pos_board(lane) if e.side == my_tag else Table3D.pos_enemy(lane)
+				var old := _card_at_slot(int(e.u))
+				if old and bool(e.get("replaced", false)):
+					for k in cards.keys():
+						if cards[k] == old:
+							cards.erase(k)
+					old.queue_free()
+				var su := {"uid": int(e.uid), "id": String(e.id), "star": int(e.star), "items": [], "fed": null}
+				var nc := Card3D.new()
+				table.add_child(nc)
+				nc.setup("hero", su.id, CardFaces.face(su.id, su.star), su.uid, "p" if e.side == my_tag else "e")
+				nc.position = pos
+				nc.home_pos = pos
+				nc.set_meta("u", su)
+				var st := Rules.stats(su)
+				var hd: Dictionary = Data.HEROES[su.id]
+				nc.set_stats(int(st.atk), int(st.hp), Rules.rank_label(int(hd.r)) + Data.SUITS[hd.s].sym, Data.SUITS[hd.s].color.lightened(0.55), su.star, String(hd.n))
+				nc.show_bars(true)
+				nc.set_bars(int(e.hp), int(e.max_hp), int(e.mana), int(e.mm), 0)
+				cards[key] = nc
+				_slot_map[int(e.u)] = key
+				nc.pop(1.2)
+				nc.float_text("Росток!", Color("9fe08a"))
+				if anim: fx.revive(pos)
+				Sfx.play("heal")
+				await _wait(0.3)
+			"cleanse":
+				if c:
+					c.float_text("очищен", Color("f2e6b0"))
+					if anim: fx.heal(c.global_position)
 			"end":
-				pass
+				var won: bool = e.outcome == my_tag
+				if e.outcome != "draw":
+					if won:
+						fx.victory(Vector3(0, 0, 1.95))
+					else:
+						fx.defeat(Vector3(0, 0, -2.1))
+					Sfx.play("victory_sting" if won else "defeat_sting")
 
 func _max_hp(b, slot: int) -> int:
 	var u = b.unit(slot)
@@ -891,6 +1137,7 @@ func _mm(b, slot: int) -> int:
 func _after_battle(res: Dictionary) -> void:
 	for k in cards:
 		(cards[k] as Card3D).reset_pose()
+	_sync_cards(true)
 	var o: String = res.outcome
 	Sfx.play("win" if o == "win" else ("lose" if o == "lose" else "draw"))
 	_refresh_hud()
@@ -946,16 +1193,36 @@ func _next_round() -> void:
 	_save()
 
 # =================== партия, сохранение ===================
+var settings := {"music_vol": 0.8, "sfx_vol": 0.9, "fullscreen": false, "speed": 2, "big_ui": false, "tutorial_done": false}
+var tutorial: Node = null
+
 func _save_settings() -> void:
+	settings.sound = sound_on
+	settings.music = Sfx.music_on
 	var f := FileAccess.open("user://settings.json", FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"sound": sound_on, "music": Sfx.music_on}))
+		f.store_string(JSON.stringify(settings))
+
+func _apply_settings() -> void:
+	if Sfx.has_method("set_volumes"):
+		Sfx.set_volumes(float(settings.music_vol), float(settings.sfx_vol))
+	var fs: bool = settings.fullscreen
+	if DisplayServer.get_name() != "headless" and OS.get_name() in ["Windows", "macOS", "Linux", "FreeBSD"]:
+		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fs else DisplayServer.WINDOW_MODE_WINDOWED
+		if DisplayServer.window_get_mode() != want and not OS.get_cmdline_user_args().has("--demo"):
+			DisplayServer.window_set_mode(want)
+	speed = int(settings.speed)
+	get_tree().root.content_scale_factor = 1.22 if settings.big_ui else 1.0
+	table._frame()
 
 func _load_settings() -> void:
 	if not FileAccess.file_exists("user://settings.json"):
 		return
 	var j = JSON.parse_string(FileAccess.get_file_as_string("user://settings.json"))
 	if j is Dictionary:
+		for k in settings:
+			if j.has(k):
+				settings[k] = j[k]
 		sound_on = bool(j.get("sound", true))
 		Sfx.enabled = sound_on
 		Sfx.music_on = bool(j.get("music", true)) and sound_on
@@ -966,7 +1233,7 @@ func _new_game(diff: String) -> void:
 	for k in cards:
 		cards[k].queue_free()
 	cards.clear()
-	m = Match.new()
+	m = Match.new(-1, true)
 	m.new_game(diff)
 	sel_uid = -1; hand_sel = -1
 	hud.clear_log()
@@ -992,9 +1259,10 @@ func _load_game() -> void:
 	for k in cards:
 		cards[k].queue_free()
 	cards.clear()
-	m = Match.new()
+	m = Match.new(-1, true)
 	if d.is_empty() or not m.load_state(d):
 		m.new_game("normal")
+	m.extras = true
 	_sync_all()
 
 # =================== оверлеи ===================
@@ -1056,6 +1324,8 @@ func _show_start() -> void:
 	var sv := _has_save()
 	if not sv.is_empty():
 		v.add_child(_button("Продолжить: раунд %d, %s соперник" % [sv.round, Data.DIFFN[sv.diff].to_lower()], "continue", null, "GoldButton"))
+	if not bool(settings.tutorial_done):
+		v.add_child(_button("Обучение для новичков — 1 минута", "tutorial", null, "GoldButton"))
 	var diffs := HBoxContainer.new()
 	diffs.add_theme_constant_override("separation", 10)
 	for d in ["easy", "normal", "hard"]:
@@ -1075,7 +1345,13 @@ func _show_start() -> void:
 		b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nets.add_child(b2)
 	v.add_child(nets)
-	v.add_child(_button("Как играть", "rules"))
+	var misc := HBoxContainer.new()
+	misc.add_theme_constant_override("separation", 10)
+	for spec in [["Как играть", "rules"], ["Обучение", "tutorial"], ["Настройки", "settings"]]:
+		var mb := _button(spec[0], spec[1])
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		misc.add_child(mb)
+	v.add_child(misc)
 	hud.show_overlay(v)
 
 const RULES_TEXT := """Магазин. Каждый раунд приносит 5 золота и проценты с накоплений (1 за каждые 10, до 5). Купите героя кликом по карте внизу. Три одинаковые карты сливаются в ★★, три ★★ — в ★★★. «Новые карты» — обновить витрину за 2 золота. «Опыт +4» — поднять уровень (больше героев на поле). «Сохранить витрину» — магазин не обновится в следующем раунде. Наведите на любую кнопку — появится подсказка.
@@ -1094,6 +1370,63 @@ const RULES_TEXT := """Магазин. Каждый раунд приносит 
 
 Иконки героев и магии: game-icons.net (CC BY 3.0). Шрифты: Philosopher, Rubik (OFL). Музыка написана для игры."""
 
+func _start_tutorial() -> void:
+	_new_game("easy")
+	if tutorial and is_instance_valid(tutorial):
+		tutorial.queue_free()
+	tutorial = preload("res://scripts/game/tutorial.gd").new()
+	add_child(tutorial)
+	tutorial.setup(self)
+	tutorial.finished.connect(func():
+		settings.tutorial_done = true
+		_save_settings()
+		tutorial = null
+		_refresh_hud())
+
+func _slider(title: String, value: float, on_change: Callable) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	var l := _ink(title, 18)
+	l.custom_minimum_size.x = 170
+	var s := HSlider.new()
+	s.min_value = 0; s.max_value = 100; s.step = 1
+	s.value = value * 100.0
+	s.custom_minimum_size = Vector2(300, 32)
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var val := _ink("%d%%" % int(value * 100), 17)
+	val.custom_minimum_size.x = 60
+	s.value_changed.connect(func(x):
+		val.text = "%d%%" % int(x)
+		on_change.call(x / 100.0))
+	s.drag_ended.connect(func(_c): Sfx.play("stone_soft"); _save_settings())
+	h.add_child(l); h.add_child(s); h.add_child(val)
+	return h
+
+func _show_settings() -> void:
+	var v := _vbox(14)
+	v.add_child(_ink("Настройки", 34, "TitleLabel"))
+	v.add_child(_slider("Музыка", float(settings.music_vol), func(x):
+		settings.music_vol = x
+		_apply_settings()))
+	v.add_child(_slider("Звуки", float(settings.sfx_vol), func(x):
+		settings.sfx_vol = x
+		_apply_settings()))
+	var sp := HBoxContainer.new()
+	sp.add_theme_constant_override("separation", 10)
+	var sl := _ink("Скорость боя", 18)
+	sl.custom_minimum_size.x = 170
+	sp.add_child(sl)
+	for s in [1, 2, 4]:
+		var b := _button("×%d" % s, "set_speed", s, "GoldButton" if int(settings.speed) == s else "")
+		b.custom_minimum_size.x = 90
+		sp.add_child(b)
+	v.add_child(sp)
+	if OS.get_name() in ["Windows", "macOS", "Linux", "FreeBSD"]:
+		v.add_child(_button("Полный экран: %s" % ("вкл." if settings.fullscreen else "выкл."), "toggle_fs", null, "BlueButton" if settings.fullscreen else ""))
+	v.add_child(_button("Крупный интерфейс (телефон, планшет): %s" % ("вкл." if settings.big_ui else "выкл."), "toggle_big", null, "BlueButton" if settings.big_ui else ""))
+	v.add_child(_button("Готово", "menu", null, "GoldButton"))
+	hud.show_overlay(v)
+
 func _show_rules() -> void:
 	var v := _vbox(12)
 	var sc := ScrollContainer.new()
@@ -1110,6 +1443,9 @@ func _show_rules() -> void:
 func _show_result(res: Dictionary) -> void:
 	var v := _vbox(10)
 	var o: String = res.outcome
+	if bool(res.get("monster", false)):
+		var mt := _ink(String(res.get("monster_name", "Страж арены")), 18, "HeaderLabel")
+		v.add_child(mt)
 	var title: String = {"win": "Победа в раунде!", "lose": "Поражение", "draw": "Ничья"}[o]
 	var t := _ink(title, 40, "TitleLabel")
 	t.add_theme_color_override("font_color", Color("2f7a3a") if o == "win" else (Color("9a2b22") if o == "lose" else Color("6a5338")))
@@ -1117,8 +1453,67 @@ func _show_result(res: Dictionary) -> void:
 	v.add_child(_ink("Вы потеряли %d ОЗ · соперник потерял %d ОЗ" % [res.dmg_p, res.dmg_e], 20))
 	for n in res.get("notes", []):
 		v.add_child(_ink(String(n), 17))
-	v.add_child(_button("Следующий раунд", "next", null, "GoldButton"))
+	if bool(res.get("monster", false)) and String(res.get("ai_monster", "")) != "":
+		v.add_child(_ink("Соперник против своего Стража: %s." % {"win": "победа", "lose": "поражение", "draw": "ничья"}.get(String(res.ai_monster), "—"), 16, "MutedLabel"))
+	if not m.pending_reward.is_empty():
+		v.add_child(_ink("Выберите награду" if m.reward_source == "monster" else "Награда за серию побед — выберите одну", 24, "TitleLabel"))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		for i in m.pending_reward.size():
+			row.add_child(_reward_card(i, m.pending_reward[i]))
+		v.add_child(row)
+	else:
+		v.add_child(_button("Следующий раунд", "next", null, "GoldButton"))
 	hud.show_overlay(v, false)
+
+func _reward_card(i: int, o: Dictionary) -> Control:
+	var b := Button.new()
+	b.theme_type_variation = "GoldButton" if o.type == "legend" else ""
+	b.custom_minimum_size = Vector2(230, 330)
+	b.focus_mode = Control.FOCUS_NONE
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vb.offset_left = 12; vb.offset_right = -12; vb.offset_top = 10; vb.offset_bottom = -10
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	var tex: Texture2D = null
+	match String(o.type):
+		"legend", "hero": tex = CardFaces.face(String(o.id), int(o.get("star", 1)))
+		"magic": tex = CardFaces.magic_face(String(o["keys"][0]), m.round_n)
+		_: tex = UiTheme.icon("coin")
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.custom_minimum_size = Vector2(0, 130)
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := Label.new()
+	t.text = String(o.title)
+	t.theme_type_variation = "TitleLabel"
+	t.add_theme_font_size_override("font_size", 16)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var d := Label.new()
+	d.text = String(o.desc)
+	d.add_theme_font_size_override("font_size", 13)
+	d.max_lines_visible = 7
+	d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	b.tooltip_text = String(o.desc)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(tr); vb.add_child(t); vb.add_child(d)
+	b.add_child(vb)
+	b.pressed.connect(func():
+		Sfx.play("stone")
+		var r := m.choose_reward(i)
+		if r.get("ok", false):
+			hud.toast("Награда: %s" % String(o.title), "good")
+			_sync_all(true)
+		hud.show_overlay(null)
+		_next_round())
+	return b
 
 func _show_game_over(res: Dictionary) -> void:
 	var v := _vbox(12)

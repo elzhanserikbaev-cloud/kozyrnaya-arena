@@ -15,6 +15,7 @@ var side := "p"                # p | e
 var face_mi: MeshInstance3D
 var back_mi: MeshInstance3D
 var plate: MeshInstance3D      # подложка выделения
+var glint: MeshInstance3D      # золотая окантовка: карта входит в покерную комбинацию
 var body: StaticBody3D
 var pivot: Node3D              # всё, что наклоняется
 var bars: Node3D
@@ -83,6 +84,17 @@ func setup(p_kind: String, p_key: String, tex: Texture2D, p_uid: int = -1, p_sid
 	plate.position.z = -0.008
 	plate.visible = false
 	pivot.add_child(plate)
+	glint = MeshInstance3D.new()
+	var gq := QuadMesh.new(); gq.size = Vector2(W + 0.07, H + 0.07)
+	glint.mesh = gq
+	var gm := StandardMaterial3D.new()
+	gm.albedo_color = Color("d99a2b")
+	gm.metallic = 0.25
+	gm.roughness = 0.55
+	glint.material_override = gm
+	glint.position.z = -0.006
+	glint.visible = false
+	pivot.add_child(glint)
 	# коллайдер для выбора мышью
 	body = StaticBody3D.new()
 	var cs := CollisionShape3D.new()
@@ -140,6 +152,9 @@ func set_face(tex: Texture2D) -> void:
 func set_selected(on: bool, col := Color("d8a640")) -> void:
 	plate.visible = on
 	_plate_mat.albedo_color = col
+
+func set_in_hand(on: bool) -> void:
+	glint.visible = on
 
 func set_dim(a: float) -> void:
 	_dim = a

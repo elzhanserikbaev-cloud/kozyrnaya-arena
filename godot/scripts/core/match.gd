@@ -7,6 +7,18 @@ extends RefCounted
 ## а криты в бою считаются от зерна боя (как в сетевом JS). Сохраняется состояние Rng — после загрузки игра продолжается тем же потоком.
 ##
 ## Действия возвращают Dictionary {ok:bool, reason?:String, ...} — интерфейс показывает reason тостом.
+##
+## ---------------- Дополнения (Match.new(seed, true)) ----------------
+## Без extras всё работает ровно как раньше (паритет с JS). С extras:
+## • Страж арены: каждый 5-й раунд (is_monster_round()) игрок бьётся с отрядом монстров (monster_info()),
+##   а соперник «за кадром» — со своим таким же отрядом (бой досчитывается в start_battle()).
+##   Ва-банк в этот раунд недоступен, серии не меняются, урона между игроками нет.
+##   Поражение (и ничья) — половина обычного урона раунда (мин. 1). Победа — выбор награды.
+## • Награды: pending_reward — 3 оффера после победы над Стражем, а также после победы, которая делает серию ровно 3 или 5.
+##   Оффер: {type:"legend"|"hero"|"magic"|"gold", id?, star?, keys?, amount?, title, desc}.
+##   choose_reward(i) применяет оффер; пока награда не выбрана, next_round() возвращает false.
+##   Соперник (и auto_player) выбирают сами (Ai.choose_reward).
+## • Легенды: на поле не больше одной (move() отказывает), в магазине не выпадают.
 
 const D = preload("res://scripts/core/data.gd")
 
@@ -28,8 +40,17 @@ var over_result: String = ""         ## "" | "win" | "lose" | "draw"
 ## Режим автоигрока (для симуляций): перед боем за игрока ходит тот же ИИ (без бонуса сложности),
 ## он же сам решает ва-банк и сам разыгрывает заклинания в бою.
 var auto_player: bool = false
+## --- дополнения ---
+var extras: bool = false
+var pending_reward: Array = []       ## офферы награды игрока (пусто — нет)
+var reward_source: String = ""       ## "monster" | "streak" — за что награда
+var monster: Dictionary = {}         ## Страж текущего раунда: {name, title, theme, tier, board}
+var ai_monster_result: Dictionary = {}   ## result() боя соперника со своим Стражем
+var _ai_monster_spent: Array = []
+var reward_log: Array = []           ## [{side:"p"|"ai", round, source, type, id}] — что выбрано (статистика/UI)
 
-func _init(seed_value: int = -1) -> void:
+func _init(seed_value: int = -1, extras_on: bool = false) -> void:
+	extras = extras_on
 	if seed_value < 0:
 		seed_value = (Time.get_ticks_usec() ^ int(Time.get_unix_time_from_system() * 1000.0)) & 0x7FFFFFFF
 	rng = Rng.new(seed_value)
@@ -46,6 +67,11 @@ func new_game(difficulty: String = "normal") -> void:
 	battle = null
 	last_result = {}
 	over_result = ""
+	pending_reward = []
+	reward_source = ""
+	monster = {}
+	ai_monster_result = {}
+	reward_log = []
 	begin_round(true)
 
 func begin_round(first: bool = false) -> void:
@@ -75,7 +101,7 @@ func begin_round(first: bool = false) -> void:
 	ai["allin"] = false
 
 func next_round() -> bool:
-	if phase != "result":
+	if phase != "result" or not pending_reward.is_empty():
 		return false
 	round_n += 1
 	begin_round(false)
@@ -162,6 +188,11 @@ func move(from_zone: String, from_i: int, to_zone: String, to_i: int) -> Diction
 		return _fail("")
 	if to_zone == "board" and from_zone == "bench" and b == null and Rules.board_count(p) >= Rules.cap_of(int(p["level"])):
 		return _fail("На поле сейчас помещается %d карт. Поднимите уровень, чтобы ставить больше." % Rules.cap_of(int(p["level"])))
+	if from_zone != to_zone:
+		var incoming: Variant = a if to_zone == "board" else b
+		var outgoing: Variant = b if to_zone == "board" else a
+		if Rules.is_legend(incoming) and not Rules.is_legend(outgoing) and Rules.legend_count(Rules.board_units(p)) >= Rules.LEGEND_BOARD_MAX:
+			return _fail("На поле может стоять только одна легенда.")
 	p[from_zone][from_i] = b
 	p[to_zone][to_i] = a
 	return {"ok": true}
@@ -238,9 +269,11 @@ func top_rival_hp() -> int:
 	return int(ai["hp"])
 
 func can_allin() -> bool:
-	return phase == "shop" and int(p["allin_cd"]) <= round_n and int(p["hp"]) < top_rival_hp()
+	return phase == "shop" and not is_monster_round() and int(p["allin_cd"]) <= round_n and int(p["hp"]) < top_rival_hp()
 
 func allin_reason() -> String:
+	if is_monster_round():
+		return "Против Стража арены ва-банк не играют."
 	if int(p["allin_cd"]) > round_n:
 		return "Ва-банк снова будет доступен с раунда %d." % int(p["allin_cd"])
 	return "Ва-банк доступен, только когда у вас меньше ОЗ, чем у лидера."
@@ -270,6 +303,8 @@ func bounty_text() -> String:
 func start_battle() -> Battle:
 	if phase != "shop":
 		return battle
+	if is_monster_round():
+		return _start_monster_battle()
 	phase = "battle"
 	if auto_player:
 		Ai.take_turn(p, round_n, "normal", rng)
@@ -325,6 +360,8 @@ func finish_battle(result: Dictionary = {}) -> Dictionary:
 		if battle != null and not battle.over():
 			battle.run_to_end()
 		result = battle.result() if battle != null else {"outcome": "draw", "survivors_home": [], "survivors_away": []}
+	if is_monster_round():
+		return _finish_monster_battle(result)
 	_remove_spent(ai, "away")
 	if auto_player:
 		_remove_spent(p, "home")
@@ -383,15 +420,241 @@ func finish_battle(result: Dictionary = {}) -> Dictionary:
 	over_result = over
 	phase = "over" if over != "" else "result"
 	last_result = {"outcome": outcome, "dmg_p": dmg_p, "dmg_e": dmg_e, "over": over, "notes": notes, "bounty_card": card, "round": round_n}
+	if extras:
+		# награда за серию ровно 3 или 5 побед (у проигравшего серия ≤ 0, так что награда только у победителя)
+		last_result["monster"] = false
+		last_result["ai_reward"] = {}
+		if over == "":
+			if outcome == "win" and (int(p["streak"]) == 3 or int(p["streak"]) == 5):
+				notes.append("Серия из %d побед: выберите награду." % int(p["streak"]))
+				_offer_player(_gen_offers(p, false), "streak")
+			elif outcome == "lose" and (int(ai["streak"]) == 3 or int(ai["streak"]) == 5):
+				last_result["ai_reward"] = _ai_take_reward(_gen_offers(ai, false), "streak")
+		last_result["reward"] = pending_reward.size() > 0
 	return last_result
+
+# ---------- Страж арены (дополнения) ----------
+
+func is_monster_round(r: int = -1) -> bool:
+	var rn: int = round_n if r < 0 else r
+	return extras and rn > 0 and rn % D.MONSTER_EVERY == 0
+
+## Отряд Стража для раунда r: {name, title, theme, tier, board:[5 Unit|null]}.
+## Детерминирован (без случайности): тема по кругу, размер 3/4/5, сила растёт с тиром (тир = раунд / 5).
+## uid монстров фиксированные (90001 + линия) — счётчик uid партии не трогается.
+static func monster_info(r: int) -> Dictionary:
+	var tier: int = maxi(1, floori(float(r) / float(D.MONSTER_EVERY)))
+	var th: Dictionary = D.MONSTER_THEMES[(tier - 1) % D.MONSTER_THEMES.size()]
+	var n: int = mini(5, 2 + tier)                      # 3, 4, 5, 5 …
+	var mult: float = monster_mult(tier)
+	var star: int = 3 if mult >= float(D.STARM[3]) else (2 if mult >= float(D.STARM[2]) else 1)   # рамка ★ по силе, остаток — в fed (n=0)
+	var board: Array = []
+	board.resize(D.BOARD_SIZE)
+	var ids: Array = [th["boss"]]
+	ids.append_array((th["minions"] as Array).slice(0, n - 1))
+	var lanes: Array = [2, 1, 3, 0, 4]
+	for i in ids.size():
+		var id: String = ids[i]
+		var d: Dictionary = D.HEROES[id]
+		var fed: Variant = null
+		var extra_hp: int = D.r(float(d["hp"]) * (mult - float(D.STARM[star])))
+		var extra_atk: int = D.r(float(d["atk"]) * (mult - float(D.STARM[star])))
+		if extra_hp > 0 or extra_atk > 0:
+			fed = {"atk": extra_atk, "hp": extra_hp, "n": 0}
+		board[lanes[i]] = {"uid": 90001 + int(lanes[i]), "id": id, "star": star, "items": [], "fed": fed}
+	return {"name": th["name"], "title": "Страж арены: %s" % th["name"], "theme": th["key"], "tier": tier, "board": board}
+
+## Множитель статов монстров по тиру (Data.MONSTER_MULT, дальше +MONSTER_MULT_STEP за тир).
+static func monster_mult(tier: int) -> float:
+	var last: int = D.MONSTER_MULT.size() - 1
+	if tier <= last:
+		return float(D.MONSTER_MULT[maxi(1, tier)])
+	return float(D.MONSTER_MULT[last]) + D.MONSTER_MULT_STEP * float(tier - last)
+
+func _start_monster_battle() -> Battle:
+	phase = "battle"
+	if auto_player:
+		Ai.take_turn(p, round_n, "normal", rng)
+	Ai.take_turn(ai, round_n, diff, rng)
+	p["allin"] = false
+	ai["allin"] = false
+	monster = monster_info(round_n)
+	var sd: int = rng.next_seed()
+	var sd_ai: int = rng.next_seed()
+	# соперник бьётся со своим Стражем сразу (игрок этот бой не видит)
+	var ab: Battle = Battle.new(ai["board"], (monster["board"] as Array).duplicate(true),
+		{"name": ai["name"], "ai": true, "hand": (ai["hand"] as Array).duplicate(), "allin": false},
+		{"name": monster["title"], "ai": false, "hand": [], "monster": true}, sd_ai, round_n)
+	ab.run_to_end()
+	ai_monster_result = ab.result()
+	_ai_monster_spent = ab.spent_spells("home").duplicate()
+	var p_spells: Array = (p["hand"] as Array).filter(func(k: String) -> bool: return D.MAGIC[k]["k"] == "spell") if auto_player else []
+	battle = Battle.new(p["board"], (monster["board"] as Array).duplicate(true),
+		{"name": p["name"], "ai": auto_player, "hand": p_spells, "allin": false},
+		{"name": monster["title"], "ai": false, "hand": [], "monster": true}, sd, round_n)
+	return battle
+
+## Половина обычного урона раунда (мин. 1). result — с точки зрения стороны (home), Страж — away.
+static func monster_damage(round_number: int, result: Dictionary) -> int:
+	var base: int = Rules.base_damage(round_number)
+	var full: int
+	if str(result.get("outcome", "draw")) == "away":
+		full = Rules.round_damage(base, Rules.survivor_score(result.get("survivors_away", [])))
+	else:
+		full = Rules.round_damage(base, 0)
+	return maxi(1, D.r(float(full) / 2.0))
+
+func _finish_monster_battle(result: Dictionary) -> Dictionary:
+	if auto_player:
+		_remove_spent(p, "home")
+	for k: String in _ai_monster_spent:
+		var i: int = (ai["hand"] as Array).find(k)
+		if i >= 0:
+			(ai["hand"] as Array).remove_at(i)
+	_ai_monster_spent = []
+	var notes: Array = []
+	var res_p: String = str(result.get("outcome", "draw"))
+	var res_ai: String = str(ai_monster_result.get("outcome", "draw"))
+	var outcome: String = "win" if res_p == "home" else ("lose" if res_p == "away" else "draw")
+	var ai_out: String = "win" if res_ai == "home" else ("lose" if res_ai == "away" else "draw")
+	var dmg_p: int = 0 if outcome == "win" else monster_damage(round_n, result)
+	var dmg_e: int = 0 if ai_out == "win" else monster_damage(round_n, ai_monster_result)
+	p["hp"] = maxi(0, int(p["hp"]) - dmg_p)
+	ai["hp"] = maxi(0, int(ai["hp"]) - dmg_e)
+	if outcome == "win":
+		notes.append("%s повержен! Выберите награду." % monster["name"])
+	else:
+		notes.append("%s устоял: вы теряете %d ОЗ (половину урона раунда)." % [monster["name"], dmg_p])
+	notes.append("Соперник тоже одолел своего Стража." if ai_out == "win" else ("Соперник не справился со Стражем: −%d ОЗ." % dmg_e))
+	var over: String = ""
+	if int(p["hp"]) <= 0 or int(ai["hp"]) <= 0:
+		over = "win" if int(p["hp"]) > int(ai["hp"]) else ("lose" if int(p["hp"]) < int(ai["hp"]) else "draw")
+	over_result = over
+	phase = "over" if over != "" else "result"
+	var ai_reward: Dictionary = {}
+	if over == "":
+		if ai_out == "win":
+			ai_reward = _ai_take_reward(_gen_offers(ai, true), "monster")
+		if outcome == "win":
+			_offer_player(_gen_offers(p, true), "monster")
+	last_result = {"outcome": outcome, "dmg_p": dmg_p, "dmg_e": dmg_e, "over": over, "notes": notes, "bounty_card": "", "round": round_n,
+		"monster": true, "monster_name": monster["name"], "ai_monster": ai_out, "ai_reward": ai_reward, "reward": pending_reward.size() > 0}
+	return last_result
+
+# ---------- награды (дополнения) ----------
+
+## 3 оффера. from_monster — первым идёт легенда (которой у стороны ещё нет), затем 2 из {магия, золото, герой ★★};
+## иначе все три {магия, золото, герой ★★} в случайном порядке.
+func _gen_offers(side: Dictionary, from_monster: bool) -> Array:
+	var kinds: Array = ["magic", "gold", "hero"]
+	for i in range(kinds.size() - 1, 0, -1):   # перемешать (Фишер — Йетс)
+		var j: int = rng.next_int(i + 1)
+		var t: Variant = kinds[i]
+		kinds[i] = kinds[j]
+		kinds[j] = t
+	var out: Array = []
+	if from_monster:
+		var free: Array = []
+		for id: String in D.LEGENDS:
+			if not Rules.owns_id(side, id):
+				free.append(id)
+		if free.size() > 0:
+			out.append(_offer_legend(free[rng.next_int(free.size())], side))
+	for k: String in kinds:
+		if out.size() >= 3:
+			break
+		match k:
+			"magic":
+				var keys: Array = [Rules.roll_magic(rng), Rules.roll_magic(rng)]
+				out.append({"type": "magic", "keys": keys, "title": "Две карты магии",
+					"desc": "«%s» и «%s» в руку (если рука полна — продаются за свою цену)." % [D.MAGIC[keys[0]]["n"], D.MAGIC[keys[1]]["n"]]})
+			"gold":
+				out.append({"type": "gold", "amount": D.REWARD_GOLD, "title": "Кошель золота", "desc": "+%d золота сразу." % D.REWARD_GOLD})
+			"hero":
+				var pool: Array = []
+				for id: String in D.BASE_HEROES:
+					var c: int = int(D.BASE_HEROES[id]["c"])
+					if c >= 3 and c <= 4:
+						pool.append(id)
+				var hid: String = pool[rng.next_int(pool.size())]
+				var hd: Dictionary = D.HEROES[hid]
+				out.append({"type": "hero", "id": hid, "star": 2, "title": "%s ★★" % hd["n"],
+					"desc": "%s%s, %s. %s: %s%s" % [Rules.rank_label(int(hd["r"])), D.SUITS[hd["s"]]["sym"], D.SUITS[hd["s"]]["name"], hd["ab"]["n"], D.ab_desc(hid, 2), _space_note(side, hid)]})
+	return out
+
+func _offer_legend(id: String, side: Dictionary) -> Dictionary:
+	var d: Dictionary = D.HEROES[id]
+	var rank: String = "Джокер в покерной руке" if d.has("wild") else "%s%s" % [Rules.rank_label(int(d["r"])), D.SUITS[d["s"]]["sym"]]
+	return {"type": "legend", "id": id, "star": 1, "title": "Легенда: %s" % d["n"],
+		"desc": "%s, %s. %s: %s На поле — только одна легенда.%s" % [rank, D.SUITS[d["s"]]["name"], d["ab"]["n"], D.ab_desc(id, 1), _space_note(side, id)]}
+
+func _space_note(side: Dictionary, id: String) -> String:
+	if (side["bench"] as Array).has(null):
+		return ""
+	var same: int = 0
+	for u: Dictionary in Rules.all_units(side):
+		if u["id"] == id and int(u["star"]) == 2:
+			same += 1
+	return "" if same >= 2 else " Скамья полна — карта будет продана."
+
+func _offer_player(offers: Array, source: String) -> void:
+	pending_reward = offers
+	reward_source = source
+	if auto_player and not offers.is_empty():
+		choose_reward(Ai.choose_reward(p, offers))
+
+func _ai_take_reward(offers: Array, source: String) -> Dictionary:
+	if offers.is_empty():
+		return {}
+	var o: Dictionary = offers[Ai.choose_reward(ai, offers)]
+	_apply_offer(ai, o)
+	reward_log.append({"side": "ai", "round": round_n, "source": source, "type": o["type"], "id": o.get("id", "")})
+	return o
+
+## Выбрать награду i из pending_reward. {ok, offer, unit?, merged?, gold?, keys?, sold?}
+func choose_reward(i: int) -> Dictionary:
+	if pending_reward.is_empty() or i < 0 or i >= pending_reward.size():
+		return _fail("")
+	var o: Dictionary = pending_reward[i]
+	var res: Dictionary = _apply_offer(p, o)
+	reward_log.append({"side": "p", "round": round_n, "source": reward_source, "type": o["type"], "id": o.get("id", "")})
+	pending_reward = []
+	reward_source = ""
+	res["ok"] = true
+	res["offer"] = o
+	return res
+
+func _apply_offer(side: Dictionary, o: Dictionary) -> Dictionary:
+	match str(o["type"]):
+		"gold":
+			side["gold"] = int(side["gold"]) + int(o["amount"])
+			return {"gold": int(o["amount"])}
+		"magic":
+			for k: String in o["keys"]:
+				Rules.return_item(side, k)
+			return {"keys": o["keys"]}
+		"hero", "legend":
+			var u: Dictionary = Rules.new_unit(str(o["id"]), int(o.get("star", 1)))
+			var r: Dictionary = Rules.gain_unit(side, u)
+			if not r["ok"]:
+				var v: int = Rules.sell_value(u)
+				side["gold"] = int(side["gold"]) + v
+				return {"sold": true, "gold": v}
+			return {"unit": u, "merged": r["merged"]}
+	return {}
 
 # ---------- сохранение ----------
 
 ## Состояние для JSON (сохраняется только фаза магазина, как в JS).
 func save_state() -> Dictionary:
-	return {"v": 1, "diff": diff, "round": round_n, "phase": phase, "p": p.duplicate(true), "ai": ai.duplicate(true),
+	var st: Dictionary = {"v": 1, "diff": diff, "round": round_n, "phase": phase, "p": p.duplicate(true), "ai": ai.duplicate(true),
 		"shop": shop.duplicate(), "magic_shop": magic_shop.duplicate(), "locked": locked, "free_roll": free_roll,
 		"rng": rng.state, "uidc": Rules.next_uid_value, "over_result": over_result}
+	if extras:
+		st["extras"] = true
+		st["pending_reward"] = pending_reward.duplicate(true)
+		st["reward_source"] = reward_source
+	return st
 
 func load_state(d: Dictionary) -> bool:
 	if not d.has("p") or not d.has("ai"):
@@ -417,7 +680,34 @@ func load_state(d: Dictionary) -> bool:
 	Rules.next_uid_value = int(d.get("uidc", 1))
 	over_result = str(d.get("over_result", ""))
 	battle = null
+	extras = bool(d.get("extras", extras))
+	pending_reward = []
+	reward_source = ""
+	if extras:
+		var pr: Variant = d.get("pending_reward", [])
+		if pr is Array:
+			for o: Variant in pr:
+				if o is Dictionary and _offer_ok(o):
+					var co: Dictionary = (o as Dictionary).duplicate(true)
+					for k: String in ["amount", "star"]:
+						if co.has(k):
+							co[k] = int(co[k])   # JSON отдаёт числа как float
+					pending_reward.append(co)
+		reward_source = str(d.get("reward_source", ""))
 	return true
+
+static func _offer_ok(o: Dictionary) -> bool:
+	match str(o.get("type", "")):
+		"gold": return o.has("amount")
+		"magic":
+			if not o.get("keys") is Array:
+				return false
+			for k: Variant in o["keys"]:
+				if not D.MAGIC.has(str(k)):
+					return false
+			return true
+		"hero", "legend": return D.HEROES.has(str(o.get("id", "")))
+	return false
 
 static func _clean_unit(u: Variant) -> Variant:
 	if not u is Dictionary or not D.HEROES.has(str(u.get("id", ""))):

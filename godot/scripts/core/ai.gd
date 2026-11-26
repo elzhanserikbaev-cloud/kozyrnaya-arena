@@ -35,8 +35,16 @@ static func arrange(side: Dictionary) -> void:
 	var k: int = mini(cap, all.size())
 	var cand: Array = all.slice(0, mini(all.size(), cap + 3))
 	var best: Array = all.slice(0, k)
+	if Rules.legend_count(best) > Rules.LEGEND_BOARD_MAX:
+		# дополнения: на поле не больше одной легенды — по умолчанию берём сильнейших без лишних легенд
+		best = []
+		for u: Dictionary in all:
+			if best.size() < k and (not Rules.is_legend(u) or Rules.legend_count(best) < Rules.LEGEND_BOARD_MAX):
+				best.append(u)
 	var best_score: float = -1.0
 	for st: Array in combos(cand, k):
+		if Rules.legend_count(st) > Rules.LEGEND_BOARD_MAX:
+			continue
 		var ti: Dictionary = Rules.team_info(st)
 		var H: Dictionary = D.HANDS[ti["hand"]]
 		var sum: float = 0.0
@@ -166,6 +174,34 @@ static func magic(side: Dictionary, round_n: int, diff: String, rng: Rng) -> voi
 			hand.append(k)
 		side["gold"] = int(side["gold"]) - int(M["c"])
 		break
+
+## Дополнения: какую из наград (Match.pending_reward) взять. Возвращает индекс оффера.
+## Легенда — если на поле ещё нет легенды; герой ★★ — если есть место (или он сольётся); иначе золото/магия.
+static func choose_reward(side: Dictionary, offers: Array) -> int:
+	var best: int = 0
+	var best_sc: float = -1.0
+	var bench_free: bool = (side["bench"] as Array).has(null)
+	var hand_n: int = (side["hand"] as Array).size()
+	for i in offers.size():
+		var o: Dictionary = offers[i]
+		var sc: float = 0.0
+		match str(o.get("type", "")):
+			"legend":
+				sc = (100.0 if Rules.legend_count(Rules.all_units(side)) == 0 else 15.0) if bench_free else 5.0
+			"hero":
+				var same: int = 0
+				for u: Dictionary in Rules.all_units(side):
+					if u["id"] == o["id"] and int(u["star"]) == 2:
+						same += 1
+				sc = (60.0 + 25.0 * same) if (bench_free or same >= 2) else 8.0
+			"gold":
+				sc = 45.0 if int(side["gold"]) < 20 else 30.0
+			"magic":
+				sc = 40.0 if hand_n <= 3 else 12.0
+		if sc > best_sc:
+			best_sc = sc
+			best = i
+	return best
 
 ## Идёт ли соперник ва-банк (fight() в JS): когда отстаёт больше чем на 15 ОЗ, с шансом 60%, раз в 3 раунда.
 ## Случайное число берётся только если остальные условия выполнены (как && в JS).

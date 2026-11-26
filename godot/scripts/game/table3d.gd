@@ -20,6 +20,8 @@ var cam_dist := 10.2
 var key_light: DirectionalLight3D
 var fill_light: OmniLight3D
 var env: Environment
+var plaque_enemy: Node3D
+var plaque_me: Node3D
 var slots := {}                # "board:i" / "bench:i" / "sell" → MeshInstance3D
 var slot_mats := {}
 var hovered: Card3D
@@ -36,6 +38,7 @@ func _ready() -> void:
 	_build_env()
 	_build_table()
 	_build_slots()
+	_build_divider()
 	_build_camera()
 
 func _tex(p: String) -> Texture2D:
@@ -154,6 +157,93 @@ func _build_table() -> void:
 	flm.uv1_scale = Vector3(10, 10, 1)
 	floor_mi.material_override = flm
 	add_child(floor_mi)
+
+## Разделительная полоса между линиями (камень с латунной вставкой) и таблички рук по краям.
+func _build_divider() -> void:
+	var z := -0.08
+	var stone := _mat(_tex("res://assets/table/stone_rim.png"), Color(0.78, 0.82, 0.9), 0.75)
+	stone.uv1_scale = Vector3(6, 1, 1)
+	var brass := _mat(null, Color("c39a52"), 0.35, 0.8)
+	for side in [-1, 1]:
+		# две половины полосы, в центре — эмблема стихий на сукне
+		var bar := MeshInstance3D.new()
+		var bm := BoxMesh.new(); bm.size = Vector3(6.2, 0.07, 0.16)
+		bar.mesh = bm
+		bar.position = Vector3(side * 4.55, 0.035, z)
+		bar.material_override = stone
+		add_child(bar)
+		var inl := MeshInstance3D.new()
+		var im := BoxMesh.new(); im.size = Vector3(6.0, 0.012, 0.035)
+		inl.mesh = im
+		inl.position = Vector3(side * 4.55, 0.075, z)
+		inl.material_override = brass
+		add_child(inl)
+		# латунные «гвозди» на концах
+		for dx in [-2.95, 2.95]:
+			var stud := MeshInstance3D.new()
+			var sm := CylinderMesh.new(); sm.top_radius = 0.07; sm.bottom_radius = 0.08; sm.height = 0.05
+			stud.mesh = sm
+			stud.position = Vector3(side * 4.55 + dx, 0.08, z)
+			stud.material_override = brass
+			add_child(stud)
+	plaque_enemy = _plaque(Vector3(-6.55, 0.5, z - 0.55), Color("e07a6a"))
+	plaque_me = _plaque(Vector3(6.55, 0.5, z + 0.45), Color("f0c45a"))
+
+func _plaque(pos: Vector3, accent: Color) -> Node3D:
+	var n := Node3D.new()
+	n.position = pos
+	n.rotation.x = -0.35   # почти вертикально, лицом к камере
+	add_child(n)
+	var bg := MeshInstance3D.new()
+	var q := QuadMesh.new(); q.size = Vector2(2.4, 1.15)
+	bg.mesh = q
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _tex("res://assets/ui/panel_slate.png")
+	m.albedo_color = Color(0.85, 0.88, 0.95, 0.96)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.roughness = 0.8
+	bg.material_override = m
+	n.add_child(bg)
+	var t := Label3D.new()
+	t.name = "who"
+	t.font = CardFaces.f_bold
+	t.font_size = 44
+	t.pixel_size = 0.004
+	t.modulate = accent
+	t.outline_size = 10
+	t.outline_modulate = Color(0.04, 0.05, 0.07)
+	t.position = Vector3(0, 0.33, 0.01)
+	n.add_child(t)
+	var h := Label3D.new()
+	h.name = "hand"
+	h.font = CardFaces.f_bold
+	h.font_size = 72
+	h.pixel_size = 0.004
+	h.outline_size = 14
+	h.outline_modulate = Color(0.04, 0.05, 0.07)
+	h.position = Vector3(0, 0.05, 0.01)
+	n.add_child(h)
+	var b := Label3D.new()
+	b.name = "bonus"
+	b.font = CardFaces.f_bold
+	b.font_size = 40
+	b.pixel_size = 0.004
+	b.modulate = Color("e8eef7")
+	b.outline_size = 10
+	b.outline_modulate = Color(0.04, 0.05, 0.07)
+	b.position = Vector3(0, -0.27, 0.01)
+	n.add_child(b)
+	return n
+
+## Подписи рук на табличках: who — чья рука, hand — название, bonus — бонус.
+func set_hands(enemy_who: String, enemy_hand: String, enemy_bonus: String, my_hand: String, my_bonus: String) -> void:
+	for pr in [[plaque_enemy, enemy_who, enemy_hand, enemy_bonus], [plaque_me, "ВЫ", my_hand, my_bonus]]:
+		var p: Node3D = pr[0]
+		(p.get_node("who") as Label3D).text = String(pr[1]).to_upper()
+		var hl: Label3D = p.get_node("hand")
+		hl.text = pr[2]
+		hl.font_size = clampi(int(560.0 / maxf(1.0, 0.62 * String(pr[2]).length())), 40, 72)
+		(p.get_node("bonus") as Label3D).text = pr[3]
 
 func _build_slots() -> void:
 	var st := _tex("res://assets/ui/slot.png")

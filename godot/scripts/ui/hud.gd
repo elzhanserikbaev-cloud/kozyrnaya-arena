@@ -613,6 +613,18 @@ func set_shop(ids: Array, gold: int) -> void:
 			_corner(tb, Rules.rank_label(int(d.r)) + Data.SUITS[d.s].sym, str(d.c), str(st.atk), str(st.hp), Data.SUITS[d.s].color.lightened(0.45))
 			tb.modulate = Color.WHITE if gold >= int(Data.HEROES[id].c) else Color(0.55, 0.5, 0.5, 1)
 
+## Подсказка над картой магазина: какую руку она соберёт («→ Тройка»).
+func set_shop_badges(texts: Array) -> void:
+	for i in shop_buttons.size():
+		var l: Label = shop_buttons[i].get_node("st")
+		l.text = texts[i] if i < texts.size() else ""
+		l.add_theme_color_override("font_color", Color("ffd86a"))
+		l.add_theme_font_size_override("font_size", 14)
+		l.offset_top = -20.0
+		l.offset_bottom = 2.0
+		l.offset_left = -70.0
+		l.offset_right = 70.0
+
 func set_magic_shop(keys: Array, gold: int, round_n: int) -> void:
 	for i in magic_buttons.size():
 		var tb: TextureButton = magic_buttons[i]

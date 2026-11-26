@@ -147,6 +147,10 @@ static func build() -> Theme:
 		theme.set_stylebox("fill", pair[0], flat(pair[1], 8, Color(0, 0, 0, 0), 0, Vector4.ZERO, 0))
 	theme.set_font_size("font_size", "ProgressBar", 1)
 	theme.set_color("font_color", "ProgressBar", Color(0, 0, 0, 0))
+	var track := flat(Color(0, 0, 0, 0.45), 6, Color(1, 1, 1, 0.12), 1, Vector4(0, 5, 0, 5), 0)
+	theme.set_stylebox("slider", "HSlider", track)
+	theme.set_stylebox("grabber_area", "HSlider", flat(GOLD.darkened(0.15), 6, Color(0, 0, 0, 0), 0, Vector4(0, 5, 0, 5), 0))
+	theme.set_stylebox("grabber_area_highlight", "HSlider", flat(GOLD, 6, Color(0, 0, 0, 0), 0, Vector4(0, 5, 0, 5), 0))
 	theme.set_stylebox("separator", "VSeparator", flat(Color(1, 1, 1, 0.1), 0, Color(0, 0, 0, 0), 0, Vector4.ZERO, 0))
 	theme.set_constant("separation", "VSeparator", 18)
 	return theme

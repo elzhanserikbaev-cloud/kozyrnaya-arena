@@ -33,6 +33,14 @@ extends RefCounted
 ##   {t:"hp_set", u, hp}                            ОЗ выставлены напрямую (Кровавый пакт: −25% текущих ОЗ)
 ##   {t:"revive", u, hp, kind}                      боец восстал (kind "ability" — Поднять мёртвых 40%, "spell" — 50%)
 ##   {t:"end", outcome, steps}                      бой окончен (последнее событие последнего хода); outcome "home"|"away"|"draw"
+## --- дополнения (легенды; без них эти события не появляются) ---
+##   {t:"revive", u, hp, kind:"rebirth"}            Феникс восстал из пепла (сразу после своего "death"), 50% ОЗ, один раз за бой
+##   {t:"cleanse", u}                               Архангел снял с бойца яд и оглушение
+##   {t:"summon", u, by, uid, id, star, side, lane, hp, max_hp, atk, mana, mm, replaced}
+##        Древний энт посадил Ростка в линию lane (слот u). replaced=true — на месте павшего бойца (его карту убрать).
+##        Росток — полноценный боец (есть в units(), ходит со следующего хода), id "m_sapling" есть в Data.HEROES.
+##   {t:"buff", u, stat:"hp", pct, amount, hp, max_hp, atk, kind:"ability"}   +ОЗ (и макс. ОЗ) от Зова леса
+##   {t:"mana", u, mana, kind:"ability"}            Ледяное дыхание сожгло половину маны
 ## Попадание (hit) для мана-бара: цель всегда получает +8 маны (до максимума), даже если пала.
 ##
 ## ---------------- Прочее API ----------------
@@ -55,6 +63,7 @@ var ai_hands: Dictionary = {"home": [], "away": []}
 var spent: Dictionary = {"home": [], "away": []}
 var spells_used: Dictionary = {"home": 0, "away": 0}
 var queued: Array = []
+var _summon_seq: int = 0
 var _ev: Array = []
 var _ended: bool = false
 
@@ -111,6 +120,8 @@ func _build_team(board: Array, tag: String) -> Array:
 			"regen": 0.045 if lv_h == 2 else (0.02 if lv_h == 1 else 0.0),
 			"stun": 0, "poison": [], "alive": true,
 		}
+		if d["ab"]["t"] == "phoenix":
+			out[lane]["rebirth"] = 1
 	return out
 
 # ---------- запросы ----------
@@ -164,7 +175,10 @@ func outcome() -> String:
 func _survivors(tag: String) -> Array:
 	var out: Array = []
 	for c: Dictionary in _live(teams[tag]):
-		out.append({"uid": c["uid"], "id": c["id"], "star": c["star"], "lane": c["lane"], "slot": c["slot"], "hp": c["hp"], "max_hp": c["max_hp"]})
+		var sv: Dictionary = {"uid": c["uid"], "id": c["id"], "star": c["star"], "lane": c["lane"], "slot": c["slot"], "hp": c["hp"], "max_hp": c["max_hp"]}
+		if c.get("summoned", false):
+			sv["summoned"] = true
+		out.append(sv)
 	return out
 
 ## {outcome:"home"|"away"|"draw", survivors_home, survivors_away, score_home, score_away, steps}
@@ -362,6 +376,9 @@ func _hit(src: Variant, t: Variant, amt: float, can_crit: bool, kind: String) ->
 		"crit": crit, "kind": kind, "hp": t["hp"], "shield": t["shield"], "mana": t["mana"]})
 	if died:
 		_emit({"t": "death", "u": t["slot"]})
+		if int(t.get("rebirth", 0)) > 0:   # Феникс: восстаёт из пепла один раз
+			t["rebirth"] = 0
+			_revive(t, 0.5, "rebirth")
 	if src != null and src["alive"] and float(src["lifesteal"]) > 0.0:
 		_heal(src, a * float(src["lifesteal"]), "lifesteal")
 	if src != null and src["alive"] and float(t["thorns"]) > 0.0:
@@ -466,6 +483,85 @@ func _cast(c: Dictionary, t: Dictionary, allies: Array, foes: Array) -> void:
 				_revive(f, 0.4, "ability")
 			else:
 				_heal(c, P, "ability")
+		# ---------- легенды (дополнения) ----------
+		"frostbreath":
+			for x: Dictionary in _live(foes):
+				_hit(c, x, P, false, "ability")
+				if x["alive"]:
+					_stun(x, maxi(int(x["stun"]), 1), "ability")
+					var nm: int = floori(int(x["mana"]) / 2.0)
+					if nm != int(x["mana"]):
+						x["mana"] = nm
+						_emit({"t": "mana", "u": x["slot"], "mana": nm, "kind": "ability"})
+		"phoenix":
+			for x: Dictionary in _adj(foes, t["lane"]):
+				_hit(c, x, P, true, "ability")
+				if x["alive"]:
+					_poison(x, D.r(P * 0.25), 3, "ability")
+		"aegis":
+			for x: Dictionary in _live(allies):
+				_add_shield(x, P, "ability")
+				_heal(x, P * 0.5, "ability")
+				if (x["poison"] as Array).size() > 0 or int(x["stun"]) > 0:
+					x["poison"] = []
+					x["stun"] = 0
+					_emit({"t": "cleanse", "u": x["slot"]})
+		"grove":
+			var lane: int = _free_lane(allies, int(c["lane"]))
+			if lane >= 0:
+				_summon(c, "m_sapling", lane)
+			else:
+				for x: Dictionary in _live(allies):
+					_grow(x, P)
+		"jest":
+			for i in 3:
+				var lv: Array = _live(foes)
+				if lv.is_empty():
+					break
+				var x: Dictionary = lv[int(floorf(rng.next() * float(lv.size())))]
+				_hit(c, x, P, true, "ability")
+				if x["alive"] and rng.next() < 0.5:
+					_stun(x, maxi(int(x["stun"]), 1), "ability")
+
+## Ближайшая к lane пустая линия (null), иначе линия павшего бойца; -1 — мест нет.
+func _free_lane(team: Array, lane: int) -> int:
+	for pass_n in 2:
+		var best: int = -1
+		var bd: int = 9
+		for l in 5:
+			var x: Variant = team[l]
+			var ok: bool = x == null if pass_n == 0 else (x != null and not x["alive"])
+			if ok and absi(l - lane) < bd:
+				bd = absi(l - lane)
+				best = l
+		if best >= 0:
+			return best
+	return -1
+
+## Призыв бойца id в линию lane стороны c (статы — по звезде призывателя, союз Огня — как у отряда).
+func _summon(c: Dictionary, id: String, lane: int) -> void:
+	var tag: String = c["side"]
+	var team: Array = teams[tag]
+	var replaced: bool = team[lane] != null
+	var st: Dictionary = Rules.stats({"id": id, "star": int(c["star"])})
+	_summon_seq += 1
+	var u: Dictionary = {
+		"slot": slot_of(tag, lane), "uid": 900000 + slot_of(tag, lane) * 100 + _summon_seq, "id": id, "star": int(c["star"]), "side": tag, "lane": lane,
+		"d": D.HEROES[id], "max_hp": int(st["hp"]), "hp": int(st["hp"]), "atk": int(st["atk"]), "base_atk": int(st["atk"]), "mm": int(D.HEROES[id]["mm"]),
+		"mana": 0, "lifesteal": 0.0, "thorns": 0.0, "shield": 0, "crit": 0.1, "regen": float(c["regen"]),
+		"stun": 0, "poison": [], "alive": true, "summoned": true,
+	}
+	team[lane] = u
+	_emit({"t": "summon", "u": u["slot"], "by": c["slot"], "uid": u["uid"], "id": id, "star": u["star"], "side": tag, "lane": lane,
+		"hp": u["hp"], "max_hp": u["max_hp"], "atk": u["atk"], "mana": 0, "mm": u["mm"], "replaced": replaced})
+
+## +amt к ОЗ и макс. ОЗ бойца.
+func _grow(x: Dictionary, amt: float) -> void:
+	var a: int = D.r(amt)
+	var pct: int = D.r(100.0 * float(a) / float(x["max_hp"]))
+	x["max_hp"] = int(x["max_hp"]) + a
+	x["hp"] = int(x["hp"]) + a
+	_emit({"t": "buff", "u": x["slot"], "stat": "hp", "pct": pct, "amount": a, "hp": x["hp"], "max_hp": x["max_hp"], "atk": x["atk"], "kind": "ability"})
 
 func _revive(c: Dictionary, frac: float, kind: String) -> void:
 	c["alive"] = true

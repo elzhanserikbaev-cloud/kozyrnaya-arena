@@ -358,7 +358,7 @@ func _c_start() -> void:
 	for k in game.cards:
 		game.cards[k].queue_free()
 	game.cards.clear()
-	var m := Match.new()
+	var m := Match.new(-1, false)   # легенды и Стражи пока только в одиночной игре
 	m.new_game("normal")
 	m.p.name = _nm()
 	game.m = m
