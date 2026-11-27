@@ -10,6 +10,36 @@ const D = preload("res://scripts/core/data.gd")
 ## Счётчик uid карт (uidc в JS). Match сохраняет/восстанавливает его.
 static var next_uid_value: int = 1
 
+# ---------- баланс ----------
+## classic = true — числа web-версии v1.4 (нужно только тестам сверки с JS). В игре всегда false.
+static var classic: bool = false
+## Числа подобраны симуляцией (tests/balance_sim.gd, 300 партий ИИ против ИИ с дополнениями):
+##   лидер после 6-го раунда выигрывал 85% партий → ~72%; первый, кто собрал серию из 3, — 89% → ~69%;
+##   камбэки (победитель отставал на 20+ ОЗ) 14% → ~34%. static var — чтобы симуляция могла их перебирать.
+## Звёзды: ★★ ×1,75, ★★★ ×3,0 (было 1,8 / 3,2) — прокачка дешёвых карт уже не решает партию в одиночку:
+##   отряд ★★★ из карт за 1 золото бьёт отряд ★ за 5 золота в ~60% боёв (было 85%).
+static var STARM_V2: Array = [0.0, 1.0, 1.75, 3.0]
+## Легенды пробуждаются мягче: ★★ ×1,5, ★★★ ×2,0 (было 1,8 / 3,2) и на ★ они ×0,9 от своих чисел:
+##   легенда вместо одного героя в равном отряде даёт ~52–60% побед, а не 75–100%.
+static var LEGEND_STARM: Array = [0.0, 1.0, 1.5, 2.0]
+static var LEGEND_SCALE: float = 0.9
+## Стражи арены ×0,95 — звёзды игроков стали скромнее, Стражи тоже (побед над ними снова ~60%).
+static var MONSTER_SCALE: float = 0.95
+## Редкость: дорогие герои магазина чуть сильнее (индекс — стоимость 0..5), чтобы покупать их было выгоднее, чем только качать дешёвых.
+static var RARITY: Array = [1.0, 1.0, 1.01, 1.03, 1.05, 1.08]
+
+## Множитель АТК и ОЗ героя для звезды (с учётом редкости).
+static func star_mult(id: String, star: int) -> float:
+	var s: int = clampi(star, 1, 3)
+	if classic:
+		return float(D.STARM[s])
+	if D.LEGENDS.has(id):
+		return float(LEGEND_STARM[s]) * LEGEND_SCALE
+	var m: float = float(STARM_V2[s])
+	if D.BASE_HEROES.has(id):
+		m *= float(RARITY[clampi(int(D.BASE_HEROES[id]["c"]), 0, 5)])
+	return m
+
 static func r(x: float) -> int:
 	return D.r(x)
 
@@ -87,7 +117,7 @@ static func unit_by_uid(side: Dictionary, uid: int) -> Variant:
 static func stats(u: Dictionary) -> Dictionary:
 	var d: Dictionary = D.HEROES[u["id"]]
 	var fd: Dictionary = fed_of(u)
-	var sm: float = D.STARM[int(u["star"])]
+	var sm: float = star_mult(str(u["id"]), int(u["star"]))
 	return {"hp": r(float(d["hp"]) * sm) + int(fd.get("hp", 0)), "atk": r(float(d["atk"]) * sm) + int(fd.get("atk", 0))}
 
 static func sell_value(u: Dictionary) -> int:
@@ -99,7 +129,7 @@ static func power(u: Dictionary) -> float:
 	var extra: float = 0.0
 	if has_fed(u):
 		extra = float(fd.get("hp", 0)) / 8.0 + float(fd.get("atk", 0)) * 2.0
-	return (float(d["hp"]) / 8.0 + float(d["atk"]) * 2.0 + float(d["c"]) * 45.0) * float(D.STARM[int(u["star"])]) + extra
+	return (float(d["hp"]) / 8.0 + float(d["atk"]) * 2.0 + float(d["c"]) * 45.0) * star_mult(str(u["id"]), int(u["star"])) + extra
 
 ## Устойчивая сортировка (как Array.prototype.sort в JS): cmp(a,b) > 0 — a после b.
 static func ssort(arr: Array, cmp: Callable) -> Array:
@@ -259,12 +289,18 @@ static func roll_id(level: int, rng: Rng) -> String:
 			pool.append(id)
 	return pool[int(floorf(rng.next() * float(pool.size())))]
 
-## «Козырь в рукаве»: шанс подсказки в витрине. Отстающим больше.
+## «Козырь в рукаве»: шанс подсказки в витрине. Отстающим больше, тому, кто на серии побед, — нет совсем
+## (иначе лидер ещё быстрее собирает копии своих карт и катит снежный ком).
 static func help_chance(side: Variant) -> float:
 	if not side is Dictionary:
 		return 0.0
 	var sd: Dictionary = side
-	return minf(0.5, 0.2 + 0.1 * float(maxi(0, -int(sd.get("streak", 0)))) + (0.1 if int(sd["hp"]) < 50 else 0.0))
+	var st: int = int(sd.get("streak", 0))
+	if classic:
+		return minf(0.5, 0.2 + 0.1 * float(maxi(0, -st)) + (0.1 if int(sd["hp"]) < 50 else 0.0))
+	if st >= 2:
+		return 0.0
+	return minf(0.5, 0.15 + 0.1 * float(maxi(0, -st)) + (0.1 if int(sd["hp"]) < 50 else 0.0))
 
 static func help_id(level: int, side: Dictionary, rng: Rng) -> String:
 	var odds: Array = D.ODDS[level]
@@ -461,7 +497,9 @@ static func base_damage(round_n: int) -> int:
 static func streak_gold(st: int) -> int:
 	if st < 0:
 		return 3 if st <= -4 else (2 if st <= -3 else (1 if st <= -2 else 0))
-	return 2 if st >= 4 else (1 if st >= 2 else 0)
+	if classic:
+		return 2 if st >= 4 else (1 if st >= 2 else 0)
+	return 1 if st >= 3 else 0   # серия побед приносит меньше: лидеру и так хорошо
 
 ## Доход начала раунда (без изменения стороны): {interest, sb, gold}. bonus — AIBONUS для соперника.
 static func income(side: Dictionary, bonus: int = 0) -> Dictionary:

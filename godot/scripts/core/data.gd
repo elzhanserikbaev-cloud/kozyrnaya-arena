@@ -249,7 +249,7 @@ static func ab_text(t: String, v: float, a: int) -> String:
 ## Описание способности героя с числами для указанной звезды (и съеденных карт, если переданы).
 static func ab_desc(id: String, star: int = 1, fed: Variant = null) -> String:
 	var d: Dictionary = HEROES[id]
-	var atk: int = r(float(d["atk"]) * float(STARM[star]))
+	var atk: int = r(float(d["atk"]) * Rules.star_mult(id, star))
 	if fed is Dictionary and not (fed as Dictionary).is_empty():
 		atk += int((fed as Dictionary).get("atk", 0))
 	return ab_text(d["ab"]["t"], float(d["ab"]["v"]), atk)

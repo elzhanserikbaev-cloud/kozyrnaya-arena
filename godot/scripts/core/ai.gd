@@ -191,9 +191,9 @@ static func choose_reward(side: Dictionary, offers: Array) -> int:
 			"hero":
 				var same: int = 0
 				for u: Dictionary in Rules.all_units(side):
-					if u["id"] == o["id"] and int(u["star"]) == 2:
+					if u["id"] == o["id"] and int(u["star"]) == int(o.get("star", 2)):
 						same += 1
-				sc = (60.0 + 25.0 * same) if (bench_free or same >= 2) else 8.0
+				sc = ((60.0 if int(o.get("star", 2)) >= 2 else 35.0) + 25.0 * same) if (bench_free or same >= 2) else 8.0
 			"gold":
 				sc = 45.0 if int(side["gold"]) < 20 else 30.0
 			"magic":

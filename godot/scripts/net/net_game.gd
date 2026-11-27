@@ -481,7 +481,7 @@ func _c_round_result(r: Dictionary) -> void:
 			m._offer_player(m._gen_offers(m.p, true), "monster")
 		elif not bool(r.get("monster", false)) and r.outcome == "win" and int(r.streak) in [3, 5]:
 			(r.notes as Array).append("Серия из %d побед: выберите награду." % int(r.streak))
-			m._offer_player(m._gen_offers(m.p, false), "streak")
+			m._offer_player(m._gen_offers(m.p, false, int(r.streak)), "streak")
 	if rb:
 		rb.force_end()
 	rb = null
@@ -653,10 +653,10 @@ func _apply_monster(bt: Dictionary, res: Dictionary, results: Dictionary) -> voi
 		"opp_name": mi.title, "opp_id": 0, "monster": true, "monster_name": mi.name}
 
 ## Награда боту: те же три оффера, что у игрока; бот выбирает как ИИ одиночной игры.
-func _bot_reward(me: Dictionary, from_monster: bool) -> void:
+func _bot_reward(me: Dictionary, from_monster: bool, streak: int = 3) -> void:
 	if _rm == null:
 		_rm = Match.new(_rng.next_seed(), true)
-	var offers: Array = _rm._gen_offers(me.side, from_monster)
+	var offers: Array = _rm._gen_offers(me.side, from_monster, streak)
 	if offers.is_empty():
 		return
 	_rm._apply_offer(me.side, offers[Ai.choose_reward(me.side, offers)])
@@ -847,6 +847,6 @@ func _apply(me: Dictionary, them: Dictionary, outcome: String, dmg_me: int, dmg_
 		me.side.hp = me.hp
 		me.side.streak = me.streak
 		if outcome == "win" and int(me.streak) in [3, 5]:
-			_bot_reward(me, false)
+			_bot_reward(me, false, int(me.streak))
 	results[me.id] = {"outcome": outcome, "dmg_p": dmg_me, "dmg_e": dmg_them, "notes": notes, "gold": gold, "card": card,
 		"opp_name": them.name, "opp_id": them.id}

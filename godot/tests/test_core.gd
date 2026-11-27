@@ -13,6 +13,7 @@ func _init() -> void:
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--games="):
 			sim_games = int(a.substr(8))
+	Rules.classic = true   # ядро сверяется с web v1.4 — на её числах (новый баланс проверяет test_extras)
 	var t0: int = Time.get_ticks_msec()
 	test_rng()
 	test_hands()

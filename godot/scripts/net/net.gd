@@ -33,7 +33,7 @@ signal lan_games_changed(list: Array)
 const LAN_PORT := 8777
 const DISCOVERY_PORT := 8778
 const MAX_CLIENTS := 7                       # 8 игроков в лобби
-const NET_PROTOCOL := 2                      # меняется при несовместимых изменениях сетевых сообщений
+const NET_PROTOCOL := 3                      # меняется при несовместимых изменениях сетевых сообщений
 const ROOM_PREFIX := "kozyr-godot-v1-"
 const CLIENT_PREFIX := "kozyr-godot-c-"
 const CODE_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # без 0/O, 1/I

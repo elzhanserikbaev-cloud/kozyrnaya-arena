@@ -396,7 +396,7 @@ func test_rewards() -> void:
 	for i in 3:
 		if m.pending_reward[i]["type"] == "gold":
 			gi = i
-	ok(m.choose_reward(gi)["ok"] and int(m.p["gold"]) == g + 6, "золото +6")
+	ok(m.choose_reward(gi)["ok"] and int(m.p["gold"]) == g + 3, "серия 3: золото +3")
 	m.phase = "battle"
 	r = m.finish_battle({"outcome": "home", "survivors_home": [], "survivors_away": []})
 	ok(not r["reward"], "серия 4 → без награды")
@@ -411,7 +411,8 @@ func test_rewards() -> void:
 	var hid: String = m.pending_reward[hi]["id"]
 	ok(int(D.HEROES[hid]["c"]) >= 3 and int(D.HEROES[hid]["c"]) <= 4, "герой стоимостью 3–4")
 	var hres: Dictionary = m.choose_reward(hi)
-	ok(hres["ok"] and int(hres["unit"]["star"]) >= 2, "герой ★★ получен")
+	ok(hres["ok"] and int(m.pending_reward.size()) == 0, "герой за серию получен")
+	ok(int(hres["unit"]["star"]) == 1 or hres["merged"] != null, "за серию — копия ★, не готовый ★★")
 	# магия: 2 карты в руку
 	m.phase = "battle"
 	m.p["streak"] = 2
@@ -421,7 +422,9 @@ func test_rewards() -> void:
 		if m.pending_reward[i]["type"] == "magic": mi = i
 	var keys: Array = m.pending_reward[mi]["keys"]
 	m.choose_reward(mi)
-	eq(m.p["hand"], keys, "2 карты магии в руке")
+	eq(m.p["hand"], keys, "карта магии в руке")
+	eq(keys.size(), 1, "серия 3: одна карта магии")
+	test_balance_v2()
 	# без extras наград нет
 	var off: Match = Match.new(34)
 	off.new_game("normal")
@@ -558,3 +561,18 @@ func test_simulation() -> void:
 	print("   по легендам: ", by_id)
 	ok(avg >= 10.0 and avg <= 14.0, "средняя длина в пределах 10–14 раундов (%.2f)" % avg)
 	ok(leg_picked > 0, "легенды берут")
+
+func test_balance_v2() -> void:
+	section("баланс v2.3: звёзды, редкость, легенды, подсказки")
+	ok(not Rules.classic, "в игре — новый баланс")
+	ok(absf(Rules.star_mult("cutpurse", 2) - 1.75) < 1e-9 and absf(Rules.star_mult("cutpurse", 3) - 3.0) < 1e-9, "★★ ×1,75, ★★★ ×3")
+	ok(Rules.star_mult("reaper", 1) > Rules.star_mult("cutpurse", 1), "дорогой герой чуть сильнее (редкость)")
+	ok(absf(Rules.star_mult("phoenix", 3) - 1.8) < 1e-9, "легенда ★★★ = ×2 от ×0,9")
+	var s: Dictionary = Rules.new_side()
+	s["streak"] = 3
+	eq(Rules.help_chance(s), 0.0, "на серии побед витрина не подыгрывает")
+	s["streak"] = -2
+	ok(absf(Rules.help_chance(s) - 0.35) < 1e-9, "−2 серия → 35%")
+	eq([Rules.streak_gold(2), Rules.streak_gold(3), Rules.streak_gold(5), Rules.streak_gold(-4)], [0, 1, 1, 3], "золото за серию: победы — меньше, поражения — как раньше")
+	var m5: Dictionary = Match.monster_info(5)
+	ok(int(m5["tier"]) == 1, "Страж 5-го раунда")

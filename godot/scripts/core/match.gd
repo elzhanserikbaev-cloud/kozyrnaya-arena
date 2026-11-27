@@ -14,7 +14,8 @@ extends RefCounted
 ##   а соперник «за кадром» — со своим таким же отрядом (бой досчитывается в start_battle()).
 ##   Ва-банк в этот раунд недоступен, серии не меняются, урона между игроками нет.
 ##   Поражение (и ничья) — половина обычного урона раунда (мин. 1). Победа — выбор награды.
-## • Награды: pending_reward — 3 оффера после победы над Стражем, а также после победы, которая делает серию ровно 3 или 5.
+## • Награды: pending_reward — 3 оффера после победы над Стражем, а также после победы, которая делает серию ровно 3 или 5
+##   (за серию — скромные: немного золота, магия или одна копия героя ★, без ★★ и легенд).
 ##   Оффер: {type:"legend"|"hero"|"magic"|"gold", id?, star?, keys?, amount?, title, desc}.
 ##   choose_reward(i) применяет оффер; пока награда не выбрана, next_round() возвращает false.
 ##   Соперник (и auto_player) выбирают сами (Ai.choose_reward).
@@ -427,9 +428,9 @@ func finish_battle(result: Dictionary = {}) -> Dictionary:
 		if over == "":
 			if outcome == "win" and (int(p["streak"]) == 3 or int(p["streak"]) == 5):
 				notes.append("Серия из %d побед: выберите награду." % int(p["streak"]))
-				_offer_player(_gen_offers(p, false), "streak")
+				_offer_player(_gen_offers(p, false, int(p["streak"])), "streak")
 			elif outcome == "lose" and (int(ai["streak"]) == 3 or int(ai["streak"]) == 5):
-				last_result["ai_reward"] = _ai_take_reward(_gen_offers(ai, false), "streak")
+				last_result["ai_reward"] = _ai_take_reward(_gen_offers(ai, false, int(ai["streak"])), "streak")
 		last_result["reward"] = pending_reward.size() > 0
 	return last_result
 
@@ -447,7 +448,7 @@ static func monster_info(r: int) -> Dictionary:
 	var th: Dictionary = D.MONSTER_THEMES[(tier - 1) % D.MONSTER_THEMES.size()]
 	var n: int = mini(5, 2 + tier)                      # 3, 4, 5, 5 …
 	var mult: float = monster_mult(tier)
-	var star: int = 3 if mult >= float(D.STARM[3]) else (2 if mult >= float(D.STARM[2]) else 1)   # рамка ★ по силе, остаток — в fed (n=0)
+	var star: int = 3 if mult >= Rules.star_mult(th["boss"], 3) else (2 if mult >= Rules.star_mult(th["boss"], 2) else 1)   # рамка ★ по силе, остаток — в fed (n=0)
 	var board: Array = []
 	board.resize(D.BOARD_SIZE)
 	var ids: Array = [th["boss"]]
@@ -457,8 +458,8 @@ static func monster_info(r: int) -> Dictionary:
 		var id: String = ids[i]
 		var d: Dictionary = D.HEROES[id]
 		var fed: Variant = null
-		var extra_hp: int = D.r(float(d["hp"]) * (mult - float(D.STARM[star])))
-		var extra_atk: int = D.r(float(d["atk"]) * (mult - float(D.STARM[star])))
+		var extra_hp: int = D.r(float(d["hp"]) * (mult - Rules.star_mult(id, star)))
+		var extra_atk: int = D.r(float(d["atk"]) * (mult - Rules.star_mult(id, star)))
 		if extra_hp > 0 or extra_atk > 0:
 			fed = {"atk": extra_atk, "hp": extra_hp, "n": 0}
 		board[lanes[i]] = {"uid": 90001 + int(lanes[i]), "id": id, "star": star, "items": [], "fed": fed}
@@ -469,9 +470,10 @@ static func monster_info(r: int) -> Dictionary:
 ## Множитель статов монстров по тиру (Data.MONSTER_MULT, дальше +MONSTER_MULT_STEP за тир).
 static func monster_mult(tier: int) -> float:
 	var last: int = D.MONSTER_MULT.size() - 1
+	var k: float = 1.0 if Rules.classic else Rules.MONSTER_SCALE
 	if tier <= last:
-		return float(D.MONSTER_MULT[maxi(1, tier)])
-	return float(D.MONSTER_MULT[last]) + D.MONSTER_MULT_STEP * float(tier - last)
+		return float(D.MONSTER_MULT[maxi(1, tier)]) * k
+	return (float(D.MONSTER_MULT[last]) + D.MONSTER_MULT_STEP * float(tier - last)) * k
 
 func _start_monster_battle() -> Battle:
 	phase = "battle"
@@ -563,8 +565,10 @@ static func awaken_legends(side: Dictionary) -> Array:
 # ---------- награды (дополнения) ----------
 
 ## 3 оффера. from_monster — первым идёт легенда (которой у стороны ещё нет), затем 2 из {магия, золото, герой ★★};
-## иначе все три {магия, золото, герой ★★} в случайном порядке.
-func _gen_offers(side: Dictionary, from_monster: bool) -> Array:
+## иначе (награда за серию streak = 3 или 5) все три в случайном порядке, но скромнее:
+##   серия 3 — 3 золота / 1 карта магии / герой ★ за 2–3 золота;
+##   серия 5 — 5 золота / 2 карты магии / герой ★ за 3–4 золота.
+func _gen_offers(side: Dictionary, from_monster: bool, streak: int = 3) -> Array:
 	var kinds: Array = ["magic", "gold", "hero"]
 	for i in range(kinds.size() - 1, 0, -1):   # перемешать (Фишер — Йетс)
 		var j: int = rng.next_int(i + 1)
@@ -579,26 +583,42 @@ func _gen_offers(side: Dictionary, from_monster: bool) -> Array:
 				free.append(id)
 		if free.size() > 0:
 			out.append(_offer_legend(free[rng.next_int(free.size())], side))
+	var small: bool = not from_monster and not Rules.classic
+	var big: bool = streak >= 5
 	for k: String in kinds:
 		if out.size() >= 3:
 			break
 		match k:
 			"magic":
+				if small and not big:
+					var k1: String = Rules.roll_magic(rng)
+					out.append({"type": "magic", "keys": [k1], "title": "Карта магии",
+						"desc": "«%s» в руку (если рука полна — продаётся за свою цену)." % D.MAGIC[k1]["n"]})
+					continue
 				var keys: Array = [Rules.roll_magic(rng), Rules.roll_magic(rng)]
 				out.append({"type": "magic", "keys": keys, "title": "Две карты магии",
 					"desc": "«%s» и «%s» в руку (если рука полна — продаются за свою цену)." % [D.MAGIC[keys[0]]["n"], D.MAGIC[keys[1]]["n"]]})
 			"gold":
-				out.append({"type": "gold", "amount": D.REWARD_GOLD, "title": "Кошель золота", "desc": "+%d золота сразу." % D.REWARD_GOLD})
+				var amt: int = D.REWARD_GOLD if not small else (5 if big else 3)
+				out.append({"type": "gold", "amount": amt, "title": "Кошель золота", "desc": "+%d золота сразу." % amt})
 			"hero":
+				# за серию — одна копия ★ (помогает собрать ★★, но не даёт готовую сильную карту)
+				var lo: int = 3
+				var hi: int = 4
+				var hstar: int = 2
+				if small:
+					hstar = 1
+					lo = 3 if big else 2
+					hi = 4 if big else 3
 				var pool: Array = []
 				for id: String in D.BASE_HEROES:
 					var c: int = int(D.BASE_HEROES[id]["c"])
-					if c >= 3 and c <= 4:
+					if c >= lo and c <= hi:
 						pool.append(id)
 				var hid: String = pool[rng.next_int(pool.size())]
 				var hd: Dictionary = D.HEROES[hid]
-				out.append({"type": "hero", "id": hid, "star": 2, "title": "%s ★★" % hd["n"],
-					"desc": "%s%s, %s. %s: %s%s" % [Rules.rank_label(int(hd["r"])), D.SUITS[hd["s"]]["sym"], D.SUITS[hd["s"]]["name"], hd["ab"]["n"], D.ab_desc(hid, 2), _space_note(side, hid)]})
+				out.append({"type": "hero", "id": hid, "star": hstar, "title": "%s %s" % [hd["n"], "★".repeat(hstar)],
+					"desc": "%s%s, %s. %s: %s%s" % [Rules.rank_label(int(hd["r"])), D.SUITS[hd["s"]]["sym"], D.SUITS[hd["s"]]["name"], hd["ab"]["n"], D.ab_desc(hid, hstar), _space_note(side, hid, hstar)]})
 	return out
 
 func _offer_legend(id: String, side: Dictionary) -> Dictionary:
@@ -607,12 +627,12 @@ func _offer_legend(id: String, side: Dictionary) -> Dictionary:
 	return {"type": "legend", "id": id, "star": 1, "title": "Легенда: %s" % d["n"],
 		"desc": "%s, %s. %s: %s На поле — только одна легенда.%s" % [rank, D.SUITS[d["s"]]["name"], d["ab"]["n"], D.ab_desc(id, 1), _space_note(side, id)]}
 
-func _space_note(side: Dictionary, id: String) -> String:
+func _space_note(side: Dictionary, id: String, star: int = 2) -> String:
 	if (side["bench"] as Array).has(null):
 		return ""
 	var same: int = 0
 	for u: Dictionary in Rules.all_units(side):
-		if u["id"] == id and int(u["star"]) == 2:
+		if u["id"] == id and int(u["star"]) == star:
 			same += 1
 	return "" if same >= 2 else " Скамья полна — карта будет продана."
 
