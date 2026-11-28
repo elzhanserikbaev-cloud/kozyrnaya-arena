@@ -88,9 +88,10 @@ func _send_advert() -> void:
 
 # ---------------- поиск (клиент) ----------------
 
-func start_browsing() -> Error:
+func start_browsing(proto: int) -> Error:
 	if not supported():
 		return ERR_UNAVAILABLE
+	_proto = proto  # иначе сравнивали с 1 по умолчанию и все игры были «несовместимы»
 	if _listen:
 		return OK
 	_listen = PacketPeerUDP.new()

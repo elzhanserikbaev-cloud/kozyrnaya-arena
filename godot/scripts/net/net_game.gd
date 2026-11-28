@@ -29,6 +29,7 @@ var _rng: Rng
 var _battles: Array = []            # [{b, home, away, ghost_of, acks:{}, t, done}]
 var _submit_deadline := 0.0
 var _resolving := false
+var _typed_ip := ""
 var h_round := 1                    # номер раунда у ведущего (для боёв и урона)
 var _rm: Match = null               # помощник ведущего: офферы наград ботам (только _gen_offers/_apply_offer)
 
@@ -109,7 +110,12 @@ func show_menu(kind: String) -> void:
 				continue
 			any = true
 			var gb := Button.new()
-			gb.text = "Войти: %s (%d/%d)%s" % [g.name, g.players, g.max, "" if g.get("open", true) else " — идёт игра"]
+			var why := ""
+			if not g.get("compatible", true):
+				why = " — другая версия игры (%s)" % g.get("version", "?")
+			elif not g.get("open", true):
+				why = " — идёт игра"
+			gb.text = "Войти: %s (%d/%d)%s" % [g.name, g.players, g.max, why]
 			gb.theme_type_variation = "BlueButton"
 			gb.disabled = not g.get("open", true) or not g.get("compatible", true)
 			gb.custom_minimum_size.y = 50
@@ -120,6 +126,9 @@ func show_menu(kind: String) -> void:
 		var h := HBoxContainer.new()
 		var ip := LineEdit.new()
 		ip.placeholder_text = "IP ведущего, например 192.168.1.5"
+		ip.text = _typed_ip  # список игр обновляется — не теряем введённый адрес
+		ip.text_changed.connect(func(t): _typed_ip = t)
+		ip.text_submitted.connect(func(t): _join_lan(t.strip_edges(), 8777))
 		ip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(ip)
 		var j := Button.new()

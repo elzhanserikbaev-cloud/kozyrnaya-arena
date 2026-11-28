@@ -202,7 +202,7 @@ func join_lan(ip: String, port := LAN_PORT) -> void:
 func start_lan_browse() -> bool:
 	if not lan_supported():
 		return false
-	var err: Error = _lan.start_browsing()
+	var err: Error = _lan.start_browsing(NET_PROTOCOL)
 	if err != OK:
 		push_warning("Net: не удалось слушать UDP %d (%s)" % [DISCOVERY_PORT, error_string(err)])
 	return err == OK
