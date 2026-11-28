@@ -29,6 +29,9 @@ signal peer_left(id: int)
 signal disconnected
 signal room_ready(code: String)
 signal lan_games_changed(list: Array)
+## Быстрая игра: одинокий ведущий нашёл стол с людьми на «младшем» месте и пересаживается туда
+## (Net уже сам начал новое подключение; игре надо сбросить своё лобби).
+signal quick_switch
 
 const LAN_PORT := 8777
 const DISCOVERY_PORT := 8778
@@ -38,6 +41,13 @@ const ROOM_PREFIX := "kozyr-godot-v1-"
 const CLIENT_PREFIX := "kozyr-godot-c-"
 const CODE_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # без 0/O, 1/I
 const CODE_LEN := 6
+## Быстрая игра: QUICK_SLOTS «общих столов» с постоянными PeerJS-id. Кто занял стол — ведущий.
+## Ищущий опрашивает все столы разом (заявка kozyr:"status"); пустой стол сервер отмечает EXPIRE.
+const QUICK_SLOTS := 12
+const QUICK_PREFIX := "kozyr-godot-q3-"      # цифра = NET_PROTOCOL: разные версии не смешиваются
+const QUICK_PROBE_MS := 8000                 # EXPIRE от облачного PeerJS приходит через ~5–6 с
+const QUICK_MERGE_MS := 7000                 # одинокий ведущий проверяет младшие столы
+const QUICK_TRIES := 3
 ## Облачный PeerJS проверяет форму сообщений: OFFER/ANSWER без правдоподобного SDP (и без label/
 ## reliable/serialization у OFFER) он не пересылает, а закрывает сокет отправителя. Поэтому служебные
 ## сообщения (заявка/выдача id/отказ) — это OFFER/ANSWER с такой SDP-заглушкой и полем metadata.kozyr.
@@ -83,6 +93,21 @@ var accepting_players := true:
 	set(v):
 		accepting_players = v
 		_refresh_advert()
+		if not v and quick and is_host and _sig:
+			_sig.close()  # партия началась — освобождаем общий стол для других
+			_host_reconnect_at = 0
+## Быстрая игра (подбор игроков), а не комната по коду.
+var quick := false
+## Номер общего стола (у ведущего — свой, у игрока — к которому подключается).
+var quick_slot := 0
+
+var _q_phase := ""          # "" | "probe" | "join" | "claim"
+var _q_res := {}            # slot -> {"st": "open"|"closed"|"empty", "humans": n}
+var _q_probe_until := 0
+var _q_tries := 0
+var _q_claim: Array = []    # свободные столы, которые пробуем занять
+var _q_merge_next := 0
+var _q_merge_cids := {}     # cid -> slot (проверка младших столов одиноким ведущим)
 
 var _phase := ""            # "" | "connecting" | "ready"
 var _deadline := 0          # ticks_msec общего таймаута подключения (0 = нет)
@@ -260,8 +285,137 @@ func join_online(code: String) -> void:
 		_fail("Нет соединения с сервером комнат")
 
 
+## Быстрая игра: найти открытый стол с людьми или самому стать ведущим свободного стола.
+func quick_match() -> void:
+	var tries := _q_tries
+	leave()
+	if not online_supported():
+		_fail("Онлайн-игра недоступна: нет модуля WebRTC")
+		return
+	mode = "online"
+	is_host = false
+	quick = true
+	_q_tries = tries + 1
+	_phase = "connecting"
+	_deadline = Time.get_ticks_msec() + ONLINE_TOTAL_TIMEOUT + QUICK_PROBE_MS
+	_q_phase = "probe"
+	_q_res.clear()
+	_q_probe_until = 0
+	_expire_count = 0
+	_rtc_attempt = 0
+	_ensure_sig()
+	if _sig.open(CLIENT_PREFIX + PeerJSSignaling.random_token(16)) != OK:
+		_fail("Нет соединения с сервером комнат")
+
+
+static func quick_peer(slot: int) -> String:
+	return QUICK_PREFIX + str(slot)
+
+
+func _q_send_probes() -> void:
+	_q_probe_until = Time.get_ticks_msec() + QUICK_PROBE_MS
+	for slot in range(1, QUICK_SLOTS + 1):
+		var cid := "kq_%d_%s" % [slot, PeerJSSignaling.random_token(6)]
+		_sig.send("OFFER", quick_peer(slot), _ctl_payload("offer", cid, {"kozyr": "status", "proto": NET_PROTOCOL}))
+
+
+func _q_slot_of(peer: String) -> int:
+	if not peer.begins_with(QUICK_PREFIX):
+		return 0
+	return int(peer.substr(QUICK_PREFIX.length()))
+
+
+## Ответы на опрос столов (у ищущего).
+func _q_on_probe_message(type: String, src: String, payload: Dictionary) -> void:
+	var slot := _q_slot_of(src)
+	if slot < 1:
+		return
+	if type == "EXPIRE":
+		_q_res[slot] = {"st": "empty", "humans": 0}
+	elif type == "ANSWER" and _ctl_kind(payload) == "status":
+		var m: Dictionary = payload.metadata
+		var ok := bool(m.get("open", false)) and int(m.get("proto", 0)) == NET_PROTOCOL
+		_q_res[slot] = {"st": "open" if ok else "closed", "humans": int(m.get("humans", 0))}
+	else:
+		return
+	if _q_res.size() >= QUICK_SLOTS:
+		_q_decide()
+
+
+func _q_decide() -> void:
+	if _q_phase != "probe":
+		return
+	var best := 0
+	var best_h := 0
+	for slot in range(1, QUICK_SLOTS + 1):
+		var r = _q_res.get(slot)
+		if r and r.st == "open" and int(r.humans) > best_h:
+			best = slot
+			best_h = int(r.humans)
+	if best > 0:
+		_q_join(best)
+		return
+	_q_claim.clear()
+	for slot in range(1, QUICK_SLOTS + 1):
+		var r = _q_res.get(slot)
+		if r == null or r.st == "empty":
+			_q_claim.append(slot)
+	_q_claim_next()
+
+
+func _q_join(slot: int) -> void:
+	_q_phase = "join"
+	quick_slot = slot
+	_host_peer = quick_peer(slot)
+	_expire_count = 0
+	_client_send_join(true)
+
+
+func _q_claim_next() -> void:
+	if _q_claim.is_empty():
+		if _q_tries < QUICK_TRIES:
+			quick_match()
+		else:
+			_fail("Все столы быстрой игры заняты. Попробуйте позже или создайте комнату по коду")
+		return
+	_q_phase = "claim"
+	quick_slot = int(_q_claim.pop_front())
+	is_host = true
+	_next_mp_id = 2
+	_pending.clear()
+	_deadline = Time.get_ticks_msec() + 20000
+	_ensure_sig()
+	if _sig.open(quick_peer(quick_slot)) != OK:
+		_fail("Нет соединения с сервером комнат")
+
+
+## Подключение к найденному столу не вышло (отказ/стол пропал) — ищем заново.
+func _q_retry_or_fail(reason: String) -> void:
+	if quick and _q_tries < QUICK_TRIES:
+		quick_match()
+	else:
+		_fail(reason)
+
+
+## Одинокий ведущий: есть ли люди за младшими столами? Если да — пересаживаемся.
+func _q_merge_tick(now: int) -> void:
+	if not quick or quick_slot <= 1 or not accepting_players or _sig == null or not _sig.is_open:
+		return
+	if not multiplayer.get_peers().is_empty() or not _pending.is_empty():
+		return
+	if now < _q_merge_next:
+		return
+	_q_merge_next = now + QUICK_MERGE_MS
+	_q_merge_cids.clear()
+	for slot in range(1, quick_slot):
+		var cid := "km_%d_%s" % [slot, PeerJSSignaling.random_token(6)]
+		_q_merge_cids[cid] = slot
+		_sig.send("OFFER", quick_peer(slot), _ctl_payload("offer", cid, {"kozyr": "status", "proto": NET_PROTOCOL}))
+
+
 ## Выйти из игры/комнаты (без сигналов). Безопасно вызывать в любом состоянии.
 func leave() -> void:
+	_q_tries = 0
 	# LEAVE облачный сервер не пересылает (закрывает наш сокет), так что не шлём: хост уберёт
 	# незавершённую заявку по таймауту, а подключённые узнают об уходе по WebRTC.
 	_teardown()
@@ -322,6 +476,13 @@ func _teardown() -> void:
 	_retry_at = 0
 	_host_reconnect_at = 0
 	accepting_players = true
+	quick = false
+	quick_slot = 0
+	_q_phase = ""
+	_q_res.clear()
+	_q_claim.clear()
+	_q_merge_cids.clear()
+	_q_merge_next = 0
 
 
 func _fail(reason: String) -> void:
@@ -473,7 +634,7 @@ func _host_open_signaling(reconnect: bool) -> void:
 	_ensure_sig()
 	if not reconnect:
 		room_code = make_code()
-	var err: Error = _sig.open(ROOM_PREFIX + room_code, reconnect)
+	var err: Error = _sig.open(quick_peer(quick_slot) if quick else ROOM_PREFIX + room_code, reconnect)
 	if err != OK and not reconnect:
 		_fail("Нет соединения с сервером комнат")
 
@@ -489,8 +650,12 @@ func _on_sig_opened(_id: String) -> void:
 			multiplayer.multiplayer_peer = _rtc
 			_phase = "ready"
 			_deadline = 0
+			_q_phase = ""
+			_q_merge_next = Time.get_ticks_msec() + QUICK_MERGE_MS
 			room_ready.emit(room_code)
 			connected.emit()
+	elif quick and _q_phase == "probe":
+		_q_send_probes()
 	else:
 		_client_send_join(true)
 
@@ -499,6 +664,12 @@ func _on_sig_failed(kind: String, detail: String) -> void:
 	if mode != "online":
 		return
 	if is_host:
+		if quick and _q_phase == "claim":
+			# Стол только что занял кто-то другой. Облачный PeerJS в этом случае часто просто
+			# закрывает сокет, не успев прислать ID-TAKEN, — поэтому любой обрыв до OPEN = «занят».
+			# Перебор ограничен: столы кончатся → новый поиск (до QUICK_TRIES) → понятная ошибка.
+			_q_claim_next()
+			return
 		if kind == "id_taken" and _phase == "connecting":
 			_host_id_attempt += 1
 			if _host_id_attempt < HOST_ID_RETRIES:
@@ -536,6 +707,7 @@ func _on_sig_message(type: String, src: String, payload: Dictionary) -> void:
 # ═════════════════════════ online: хост ═════════════════════════
 
 func _host_tick(now: int) -> void:
+	_q_merge_tick(now)
 	if _host_reconnect_at > 0 and now > _host_reconnect_at:
 		_host_reconnect_at = now + HOST_RECONNECT_MS * 3
 		_host_open_signaling(true)
@@ -550,8 +722,19 @@ func _host_tick(now: int) -> void:
 func _host_on_message(type: String, src: String, payload: Dictionary) -> void:
 	var cid := str(payload.get("connectionId", ""))
 	match type:
+		"ANSWER":
+			if _q_merge_cids.has(cid) and _ctl_kind(payload) == "status":
+				var m: Dictionary = payload.metadata
+				if bool(m.get("open", false)) and int(m.get("humans", 0)) > 0 \
+						and multiplayer.get_peers().is_empty() and _pending.is_empty():
+					quick_match()
+					quick_switch.emit()
 		"OFFER":
-			if _ctl_kind(payload) == "join":
+			if _ctl_kind(payload) == "status":
+				var humans := 1 + multiplayer.get_peers().size()
+				var is_open := accepting_players and humans < MAX_CLIENTS + 1
+				_sig.send("ANSWER", src, _ctl_payload("answer", cid, {"kozyr": "status", "open": is_open, "humans": humans, "proto": NET_PROTOCOL}))
+			elif _ctl_kind(payload) == "join":
 				_host_on_join(src, cid, payload)
 			elif _ctl_kind(payload) == "" and payload.has("sdp"):
 				_host_on_offer(src, cid, payload)
@@ -657,6 +840,10 @@ func _client_send_join(new_request: bool) -> void:
 func _client_tick(now: int) -> void:
 	if _phase != "connecting" or _sig == null:
 		return
+	if quick and _q_phase == "probe":
+		if _q_probe_until > 0 and now > _q_probe_until:
+			_q_decide()  # кто не ответил и не «истёк» — считаем свободным
+		return
 	if _retry_at > 0:
 		if now > _retry_at:
 			_retry_at = 0
@@ -668,7 +855,10 @@ func _client_tick(now: int) -> void:
 	if _my_mp_id == 0:
 		if now > _join_next:
 			if _join_sends >= JOIN_MAX_SENDS:
-				_fail("Комната не отвечает. Проверьте код и что хост не закрыл игру")
+				if quick:
+					_q_retry_or_fail("Стол быстрой игры не отвечает")
+				else:
+					_fail("Комната не отвечает. Проверьте код и что хост не закрыл игру")
 			else:
 				_client_send_join(false)
 		return
@@ -683,6 +873,12 @@ func _client_tick(now: int) -> void:
 
 
 func _client_on_message(type: String, src: String, payload: Dictionary) -> void:
+	if quick and _q_phase == "probe":
+		_q_on_probe_message(type, src, payload)
+		return
+	if quick and type == "EXPIRE" and src == _host_peer and _my_mp_id == 0 and _phase == "connecting":
+		_q_retry_or_fail("Стол быстрой игры пропал")
+		return
 	if type == "EXPIRE":
 		if src != _host_peer or _my_mp_id != 0 or _phase != "connecting":
 			return
@@ -702,7 +898,11 @@ func _client_on_message(type: String, src: String, payload: Dictionary) -> void:
 				return
 			match _ctl_kind(payload):
 				"reject":
-					_fail(str(payload.metadata.get("reason", "Хост отклонил подключение")))
+					var why := str(payload.metadata.get("reason", "Хост отклонил подключение"))
+					if quick:
+						_q_retry_or_fail(why)
+					else:
+						_fail(why)
 				"welcome":
 					if _my_mp_id == 0:
 						_client_start_rtc(int(payload.metadata.get("mp_id", 0)))

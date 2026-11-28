@@ -53,7 +53,11 @@ func _nettest(role: String, ip: String, args: PackedStringArray) -> void:
 	var online := ip.begins_with("online")
 	_on_act("net", "online" if online else "lan")
 	net_game.my_name = "Ведущий" if role == "host" else "Клиент"
-	if role == "host":
+	for a in args:
+		if a.begins_with("--name="): net_game.my_name = a.substr(7)
+	if role == "quick":
+		net_game._quick()
+	elif role == "host":
 		net_game._host()
 		if not Net.is_active() or online:
 			await Net.connected
@@ -334,6 +338,7 @@ func _dev_args() -> void:
 		elif a == "--bosstest": _bosstest(args)
 		elif a == "--settings": _show_settings()
 		elif a == "--nettest-host-online": _nettest("host", "online", args)
+		elif a == "--nettest-quick": _nettest("quick", "online", args)
 		elif a.begins_with("--nettest-join-online="): _nettest("join", "online:" + a.substr(22), args)
 		elif a.begins_with("--nettest-host"): _nettest("host", "", args)
 		elif a.begins_with("--nettest-join="): _nettest("join", a.substr(15), args)
@@ -1501,6 +1506,10 @@ func _show_start() -> void:
 	v.add_child(_ink("С друзьями", 20, "InkLabel"))
 	var nets := HBoxContainer.new()
 	nets.add_theme_constant_override("separation", 10)
+	var b0 := _button("Быстрая игра", "net", "quick", "WoodButton")
+	b0.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b0.tooltip_text = "Подбор соперников через интернет"
+	nets.add_child(b0)
 	var b1 := _button("Онлайн по коду", "net", "online", "WoodButton")
 	b1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nets.add_child(b1)

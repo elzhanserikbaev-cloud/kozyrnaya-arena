@@ -9,6 +9,11 @@ const PROTO := 2   # 2: Стражи арены, легенды и наград�
 const MAX_PLAYERS := 8
 const ACK_TIMEOUT := 8.0
 const SUBMIT_TIMEOUT := 120.0
+## Быстрая игра: ведущий ждёт до QUICK_WAIT с или пока не соберётся QUICK_START_HUMANS людей,
+## потом добирает ботов до QUICK_FILL игроков и начинает.
+const QUICK_WAIT := 40.0
+const QUICK_START_HUMANS := 4
+const QUICK_FILL := 6
 
 var game: Node                      # game.gd
 var view := ""                      # "" | "menu" | "lobby" | "play"
@@ -30,6 +35,9 @@ var _battles: Array = []            # [{b, home, away, ghost_of, acks:{}, t, don
 var _submit_deadline := 0.0
 var _resolving := false
 var _typed_ip := ""
+var _quick_deadline := 0.0          # ведущий быстрой игры: когда начинать
+var _quick_left := -1               # у всех: сколько секунд до старта (от ведущего)
+var _quick_lbl: Label = null
 var h_round := 1                    # номер раунда у ведущего (для боёв и урона)
 var _rm: Match = null               # помощник ведущего: офферы наград ботам (только _gen_offers/_apply_offer)
 
@@ -42,6 +50,7 @@ func setup(g: Node) -> void:
 	Net.peer_left.connect(_on_peer_left)
 	Net.disconnected.connect(_on_disconnected)
 	Net.room_ready.connect(func(_c): _show_lobby())
+	Net.quick_switch.connect(_on_quick_switch)
 	if Net.has_signal("lan_games_changed"):
 		Net.lan_games_changed.connect(func(_l): if view == "menu" and menu_kind == "lan": show_menu("lan"))
 	my_name = _load_name()
@@ -77,9 +86,13 @@ func show_menu(kind: String) -> void:
 	menu_kind = kind
 	view = "menu"
 	var v: VBoxContainer = game._vbox(12)
-	v.add_child(game._ink("Онлайн по коду комнаты" if kind == "online" else "Игра по локальной сети", 34, "TitleLabel"))
+	var titles := {"online": "Онлайн по коду комнаты", "lan": "Игра по локальной сети", "quick": "Быстрая игра"}
+	v.add_child(game._ink(titles.get(kind, ""), 34, "TitleLabel"))
 	v.add_child(_name_row())
-	if kind == "online":
+	if kind == "quick":
+		v.add_child(game._ink("Найдём стол с другими игроками через интернет. Если никого нет — вы станете ведущим и подождёте до %d секунд; пустые места займут боты." % int(QUICK_WAIT), 16))
+		v.add_child(game._button("Найти игру", "net_quick", null, "GoldButton"))
+	elif kind == "online":
 		v.add_child(game._ink("Один создаёт комнату и сообщает друзьям код из 6 знаков. Можно играть и с ботами.", 16))
 		var b: Button = game._button("Создать комнату", "net_host", null, "GoldButton")
 		v.add_child(b)
@@ -144,6 +157,8 @@ func on_act(name_: String, arg: Variant) -> void:
 	match name_:
 		"net_host":
 			_host()
+		"net_quick":
+			_quick()
 		"net_back":
 			Net.leave()
 			Net.stop_lan_browse()
@@ -155,6 +170,8 @@ func on_act(name_: String, arg: Variant) -> void:
 			_host_remove_bot()
 		"net_start":
 			_host_start()
+		"net_quick_go":
+			_quick_start()
 		"net_leave":
 			_leave_to_menu()
 		"net_next":
@@ -169,6 +186,18 @@ func _host() -> void:
 	else:
 		Net.stop_lan_browse()
 		Net.host_lan()
+
+func _quick() -> void:
+	Net.player_name = _nm()
+	game.hud.show_overlay(game._ink("Ищем стол с игроками…", 22))
+	Net.quick_match()
+
+func _on_quick_switch() -> void:
+	# одинокий ведущий пересаживается за стол, где уже есть люди
+	H.clear()
+	players.clear()
+	_quick_deadline = 0.0
+	game.hud.show_overlay(game._ink("Нашёлся стол с игроками — пересаживаемся…", 22))
 
 func _join_online(code: String) -> void:
 	if code.strip_edges() == "":
@@ -188,6 +217,9 @@ func _on_connected() -> void:
 		_rng = Rng.new(int(Time.get_unix_time_from_system()) & 0x7fffffff)
 		H.clear()
 		H[1] = _new_player(1, _nm(), false)
+		if Net.quick:
+			_quick_deadline = Time.get_ticks_msec() / 1000.0 + QUICK_WAIT
+			_quick_left = int(QUICK_WAIT)
 		_broadcast_lobby()
 		_show_lobby()
 	else:
@@ -218,8 +250,13 @@ func _show_lobby() -> void:
 		return
 	view = "lobby"
 	var v: VBoxContainer = game._vbox(12)
-	v.add_child(game._ink("Лобби", 34, "TitleLabel"))
-	if Net.mode == "online" and Net.room_code != "":
+	v.add_child(game._ink("Быстрая игра" if Net.quick else "Лобби", 34, "TitleLabel"))
+	_quick_lbl = null
+	if Net.quick:
+		_quick_lbl = game._ink("", 18)
+		_update_quick_label()
+		v.add_child(_quick_lbl)
+	elif Net.mode == "online" and Net.room_code != "":
 		var c: Label = game._ink("Код комнаты: %s" % Net.room_code, 30, "TitleLabel")
 		c.add_theme_color_override("font_color", Color("8a2a1a"))
 		v.add_child(c)
@@ -229,7 +266,10 @@ func _show_lobby() -> void:
 	for p in players:
 		var row: Label = game._ink("%s%s%s" % [p.name, " · бот" if p.bot else "", " · ведущий" if int(p.id) == 1 else ""], 20)
 		v.add_child(row)
-	if Net.is_host:
+	if Net.is_host and Net.quick:
+		var qs: Button = game._button("Начать сейчас (с ботами)", "net_quick_go", null, "GoldButton")
+		v.add_child(qs)
+	elif Net.is_host:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		var a: Button = game._button("Добавить бота", "net_bot_add")
@@ -350,6 +390,46 @@ func _host_start() -> void:
 	h_round = 1
 	_to_all("start", [])
 	_broadcast_lobby()
+
+func _update_quick_label() -> void:
+	if _quick_lbl == null or not is_instance_valid(_quick_lbl):
+		return
+	var humans := players.filter(func(p): return not p.bot).size()
+	var t := "Игроков за столом: %d. " % max(humans, 1)
+	if _quick_left >= 0:
+		t += "Старт через %d с или когда соберётся %d игрока. Пустые места займут боты." % [_quick_left, QUICK_START_HUMANS]
+	else:
+		t += "Ждём начала…"
+	_quick_lbl.text = t
+
+## Ведущий быстрой игры: добрать ботов и начать.
+func _quick_start() -> void:
+	if started:
+		return
+	_quick_deadline = 0.0
+	while H.size() < QUICK_FILL:
+		_host_add_bot()
+	_host_start()
+
+func _quick_tick() -> void:
+	if _quick_deadline <= 0.0 or started:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var humans := 0
+	for id in H:
+		if not H[id].bot:
+			humans += 1
+	var left := int(ceil(_quick_deadline - now))
+	if humans >= QUICK_START_HUMANS or left <= 0:
+		_quick_start()
+		return
+	if left != _quick_left:
+		_quick_left = left
+		_to_all("quick_wait", [left])
+
+func _c_quick_wait(left: int) -> void:
+	_quick_left = left
+	_update_quick_label()
 
 # =================== клиент: лобби и старт ===================
 func _c_lobby(list: Array, st: bool, _rn: int) -> void:
@@ -700,6 +780,8 @@ func _h_cast(from: int, key: String, target_uid: int) -> void:
 				H[from].snap.spells.erase(key)
 
 func _process(_dt: float) -> void:
+	if Net.is_host and Net.quick and not started:
+		_quick_tick()
 	if not Net.is_host or not started:
 		return
 	var now := Time.get_ticks_msec() / 1000.0
